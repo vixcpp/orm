@@ -39,10 +39,20 @@ find_package(spdlog QUIET)
 
 # MySQL (optional)
 if(VIX_ORM_USE_MYSQL)
-  # Prefer an official package if available
+  # Aide find_package avec *_ROOT (env & cache)
+  if (DEFINED ENV{MYSQLCPPCONN_ROOT} AND NOT DEFINED MYSQLCPPCONN_ROOT)
+    set(MYSQLCPPCONN_ROOT "$ENV{MYSQLCPPCONN_ROOT}" CACHE PATH "MySQL Connector/C++ root" FORCE)
+  endif()
+
+  # Essayes d'abord via CMake config dans le prefix
+  if (MYSQLCPPCONN_ROOT)
+    list(APPEND CMAKE_PREFIX_PATH "${MYSQLCPPCONN_ROOT}")
+  endif()
+
   find_package(MySQLCppConn QUIET)
+
   if(NOT MySQLCppConn_FOUND)
-    # Fallback alias creator (uses MYSQLCPPCONN_ROOT hint)
+    # Fallback: module d'alias fourni dans modules/orm/cmake (garde ta logique)
     list(APPEND CMAKE_MODULE_PATH "${CMAKE_CURRENT_SOURCE_DIR}/cmake")
     include(MySQLCppConnAlias OPTIONAL RESULT_VARIABLE _MYSQL_ALIAS_INCLUDED)
     if(NOT _MYSQL_ALIAS_INCLUDED)
@@ -50,6 +60,7 @@ if(VIX_ORM_USE_MYSQL)
     endif()
   endif()
 endif()
+
 
 # SQLite (optional)
 if(VIX_ORM_USE_SQLITE)
@@ -218,6 +229,7 @@ install(FILES
 )
 
 # Summary
-message(STATUS "[vix_orm] MySQL:  ${VIX_ORM_USE_MYSQL}  (target: $<BOOL:${MySQLCppConn_FOUND}>)")
-message(STATUS "[vix_orm] SQLite: ${VIX_ORM_USE_SQLITE} (found:  $<BOOL:${SQLite3_FOUND}>)")
-message(STATUS "[vix_orm] spdlog: $<BOOL:${spdlog_FOUND}>")
+message(STATUS "[vix_orm] MySQL requested: ${VIX_ORM_USE_MYSQL}; found: ${MySQLCppConn_FOUND}")
+message(STATUS "[vix_orm] SQLite requested: ${VIX_ORM_USE_SQLITE}; found: ${SQLite3_FOUND}")
+message(STATUS "[vix_orm] spdlog found: ${spdlog_FOUND}")
+
