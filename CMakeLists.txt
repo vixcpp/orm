@@ -7,7 +7,7 @@ cmake_minimum_required(VERSION 3.20)
 #   Build the vix_orm library (C++20, PIC), with optional bindings for
 #   MySQL (Connector/C++) and SQLite3. Examples are optional. The module
 #   integrates with the umbrella's export-set (VixTargets) so that a
-#   system-wide installation of Vix exposes Vix::orm via find_package(Vix).
+#   system-wide installation of Vix exposes vix::orm via find_package(Vix).
 #
 # Key points:
 #   - The project must remain buildable WITHOUT MySQL/SQLite (soft detection).
@@ -36,10 +36,10 @@ cmake_minimum_required(VERSION 3.20)
 #       install(TARGETS vix_orm EXPORT VixTargets ...)
 #   - Consumers use:
 #       find_package(Vix CONFIG REQUIRED)
-#       target_link_libraries(app PRIVATE Vix::orm)
+#       target_link_libraries(app PRIVATE vix::orm)
 # ======================================================================
 
-project(vix_orm VERSION 1.1.1 LANGUAGES CXX)
+project(vix_orm VERSION 1.2.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
@@ -125,7 +125,7 @@ endif()
 
 # ---------------- Library target -----------
 add_library(vix_orm ${VIX_ORM_SOURCES} ${VIX_ORM_PUBLIC_HEADERS})
-add_library(Vix::orm ALIAS vix_orm)
+add_library(vix::orm ALIAS vix_orm)
 
 target_include_directories(vix_orm PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
@@ -173,7 +173,7 @@ endif()
 # ---------------- Examples -----------------
 if(VIX_ORM_BUILD_EXAMPLES)
   add_executable(vix_orm_users examples/users_crud.cpp)
-  target_link_libraries(vix_orm_users PRIVATE Vix::orm)
+  target_link_libraries(vix_orm_users PRIVATE vix::orm)
   if(MSVC)
     target_compile_options(vix_orm_users PRIVATE ${_WARNINGS_MSVC})
   else()
