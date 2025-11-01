@@ -39,7 +39,7 @@ cmake_minimum_required(VERSION 3.20)
 #       target_link_libraries(app PRIVATE vix::orm)
 # ======================================================================
 
-project(vix_orm VERSION 1.1.1 LANGUAGES CXX)
+project(vix_orm VERSION 1.2.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
