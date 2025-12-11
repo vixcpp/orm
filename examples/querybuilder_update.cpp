@@ -8,7 +8,7 @@
 #include <vix/orm/orm.hpp>
 #include <iostream>
 
-using namespace Vix::orm;
+using namespace vix::orm;
 
 int main(int argc, char **argv)
 {
@@ -21,7 +21,6 @@ int main(int argc, char **argv)
     {
         ConnectionPool pool{host, user, pass, db};
 
-        // Build: UPDATE users SET age=? WHERE email=?
         QueryBuilder qb;
         qb.raw("UPDATE users SET age=? WHERE email=?")
             .param(29)

@@ -15,7 +15,7 @@ struct User
     int age{};
 };
 
-namespace Vix::orm
+namespace vix::orm
 {
     template <>
     struct Mapper<User>
@@ -34,7 +34,7 @@ namespace Vix::orm
 
 int main(int argc, char **argv)
 {
-    using namespace Vix::orm;
+    using namespace vix::orm;
 
     std::string host = (argc > 1 ? argv[1] : "tcp://127.0.0.1:3306");
     std::string user = (argc > 2 ? argv[2] : "root");

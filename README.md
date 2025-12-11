@@ -103,57 +103,247 @@ cmake -S .. -B . \
 cmake --build . -j
 ```
 
-# 🧠 Usage Example
+## 🧱 Core Concepts
+
+### 1️⃣ DbConfig — The Database Configuration Model
+
+```cpp
+DbConfig cfg;
+cfg.engine = DbEngine::MySQL;
+
+cfg.mysql.host = "tcp://127.0.0.1:3306";
+cfg.mysql.user = "root";
+cfg.mysql.password = "";
+cfg.mysql.database = "vixdb";
+cfg.mysql.pool = {1, 8};
+```
+
+### 2️⃣ Database — High-level database entry point
+
+```cpp
+Database db{cfg};
+auto& pool = db.pool();
+```
+
+### 3️⃣ ConnectionPool
+
+```cpp
+PooledConn pc(pool);
+auto& c = pc.get();
+
+auto st = c.prepare("SELECT 1");
+st->exec();
+```
+
+### 4️⃣ Mapper<T>
+
+```cpp
+template<>
+struct Mapper<User> {
+    static auto toInsertParams(const User& u) {
+        return std::vector<std::pair<std::string, std::any>>{
+            {"name", u.name},
+            {"email", u.email},
+            {"age", u.age}
+        };
+    }
+};
+```
+
+### 5️⃣ Repository<T>
+
+```cpp
+Repository<User> users{db.pool(), "users"};
+auto id = users.create(User{"Alice", "alice@example.com", 27});
+```
+
+### 6️⃣ Transactions / UnitOfWork
+
+```cpp
+UnitOfWork uow{db.pool()};
+auto& c = uow.conn();
+
+c.prepare("INSERT INTO logs(msg) VALUES(?)")
+    ->bind(1, "hello")->exec();
+
+uow.commit();
+```
+
+### 7️⃣ QueryBuilder
+
+```cpp
+QueryBuilder qb;
+qb.raw("UPDATE users SET age=? WHERE email=?")
+  .param(29)
+  .param("zoe@example.com");
+```
+
+### 🧰 Usage Examples
+
+#### ✔️ Insert with Repository
+
+```cpp
+DbConfig cfg = make_db_config_from_vix_config(vix::config::Config::getInstance());
+Database db{cfg};
+
+Repository<User> users{db.pool(), "users"};
+auto id = users.create({0, "Gaspard", "gaspard@example.com", 28});
+std::cout << "User inserted with id=" << id << "\n";
+```
+
+### ✔️ UnitOfWork with Automatic Rollback
+
+```cpp
+UnitOfWork uow{db.pool()};
+auto& c = uow.conn();
+
+// Insert user
+c.prepare("INSERT INTO users(name,email,age) VALUES(?,?,?)")
+    ->bind(1, "Alice")
+    ->bind(2, "alice@example.com")
+    ->bind(3, 27)
+    ->exec();
+
+auto userId = c.lastInsertId();
+
+// Insert order
+c.prepare("INSERT INTO orders(user_id,total) VALUES(?,?)")
+    ->bind(1, userId)
+    ->bind(2, 150.0)
+    ->exec();
+
+uow.commit();
+```
+
+### ✔️ QueryBuilder UPDATE
+
+```cpp
+QueryBuilder qb;
+qb.raw("UPDATE users SET age=? WHERE email=?")
+  .param(30)
+  .param("mina@example.com");
+
+PooledConn pc(db.pool());
+auto st = pc.get().prepare(qb.sql());
+
+// bind params
+const auto& ps = qb.params();
+for (size_t i = 0; i < ps.size(); ++i)
+    st->bind(i + 1, ps[i]);
+st->exec();
+```
+
+### ✔️ Migrations Example
+
+```cpp
+class CreateUsers : public Migration {
+public:
+std::string id() const override { return "2025_10_10_create_users"; }
+
+    void up(Connection& c) override {
+        c.prepare(
+            "CREATE TABLE IF NOT EXISTS users("
+            " id BIGINT PRIMARY KEY AUTO_INCREMENT,"
+            " name VARCHAR(120),"
+            " email VARCHAR(190),"
+            " age INT )")->exec();
+    }
+
+};
+```
+
+### Running:
+
+```cpp
+auto raw = make_mysql_conn(host, user, pass, db);
+MySQLConnection conn{raw};
+
+MigrationsRunner runner{conn};
+CreateUsers m1;
+runner.add(&m1);
+runner.runAll();
+```
+
+### 🧠 Usage Example
 
 Example: Simple CRUD (examples/users_crud.cpp)
 
 ```cpp
-#include <vix/orm/orm.hpp>
-#include <iostream>
+DbConfig cfg = make_db_config_from_vix_config(
+    vix::config::Config::getInstance()
+);
 
-struct User {
-    std::int64_t id{};
-    std::string name;
-    std::string email;
-    int age{};
-};
+Database db{cfg};
 
-namespace Vix::orm {
-template<> struct Mapper<User> {
-    static std::vector<std::pair<std::string, std::any>> toInsertParams(const User& u) {
-        return {{"name", u.name}, {"email", u.email}, {"age", u.age}};
-    }
-    static std::vector<std::pair<std::string, std::any>> toUpdateParams(const User& u) {
-        return {{"name", u.name}, {"email", u.email}, {"age", u.age}};
-    }
-};
-}
+Repository<User> users{db.pool(), "users"};
+auto id = users.create({0, "Gaspard", "gaspard@example.com", 28});
 
-int main() {
-    using namespace Vix::orm;
-    try {
-        ConnectionPool pool{"tcp://127.0.0.1:3306", "root", "", "vixdb"};
-        BaseRepository<User> users{pool, "users"};
-        auto id = users.create(User{0, "Alice", "alice@example.com", 28});
-        std::cout << "[OK] Insert user → id=" << id << std::endl;
-    } catch (const std::exception& e) {
-        std::cerr << "[ERR] " << e.what() << std::endl;
-    }
-}
+std::cout << "User inserted with id=" << id << "\n";
 ```
 
-# Example Database Schema
+### ✔️ UnitOfWork Transaction Example
 
-```sql
-CREATE DATABASE IF NOT EXISTS vixdb;
-USE vixdb;
-CREATE TABLE IF NOT EXISTS users (
-  id BIGINT UNSIGNED NOT NULL AUTO_INCREMENT,
-  name  VARCHAR(120) NOT NULL,
-  email VARCHAR(190) NOT NULL,
-  age   INT NOT NULL,
-  PRIMARY KEY (id)
-) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;
+```cpp
+UnitOfWork uow{db.pool()};
+auto& c = uow.conn();
+
+// Insert user
+c.prepare("INSERT INTO users(name,email,age) VALUES(?,?,?)")
+    ->bind(1, "Alice")
+    ->bind(2, "alice@example.com")
+    ->bind(3, 27)
+    ->exec();
+
+auto userId = c.lastInsertId();
+
+// Insert order
+c.prepare("INSERT INTO orders(user_id,total) VALUES(?,?)")
+    ->bind(1, userId)
+    ->bind(2, 150.0)
+    ->exec();
+
+uow.commit();
+```
+
+### ✔️ QueryBuilder UPDATE Example
+
+```cpp
+QueryBuilder qb;
+qb.raw("UPDATE users SET age=? WHERE email=?")
+  .param(29)
+  .param("zoe@example.com");
+
+PooledConn pc(db.pool());
+auto st = pc.get().prepare(qb.sql());
+
+const auto& params = qb.params();
+for (size_t i = 0; i < params.size(); ++i)
+    st->bind(i + 1, params[i]);
+
+auto affected = st->exec();
+```
+
+### ✔️ Migrations Example
+
+```cpp
+class CreateUsers : public Migration {
+public:
+    std::string id() const override { return "2025_10_10_create_users"; }
+
+    void up(Connection& c) override {
+        c.prepare(
+            "CREATE TABLE IF NOT EXISTS users("
+            " id BIGINT AUTO_INCREMENT PRIMARY KEY,"
+            " name VARCHAR(120),"
+            " email VARCHAR(190),"
+            " age INT)"
+        )->exec();
+    }
+
+    void down(Connection& c) override {
+        c.prepare("DROP TABLE IF EXISTS users")->exec();
+    }
+};
 ```
 
 # Run:
@@ -191,59 +381,32 @@ CREATE TABLE IF NOT EXISTS users (
 # 🧱 Architecture
 
 ```lua
-+-------------------+         +-------------------+
-|   Application     | ----->  |   Repository<T>   |
-+-------------------+         +-------------------+
-          |                           |
-          | uses Mapper<T>            |
-          v                           v
-  +-------------------+       +-------------------+
-  |   ConnectionPool  | <-->  |   MySQLConnection |
-  +-------------------+       +-------------------+
-          |                           |
-          v                           v
-  +-------------------+       +-------------------+
-  |  MySQL Driver     |       |   QueryBuilder    |
-  +-------------------+       +-------------------+
+App / Services
+       |
+       v
++---------------------+
+|     Repository<T>   |
++---------------------+
+      | uses Mapper<T>
+      v
++---------------------+
+|    UnitOfWork       |
+|  Transaction/Commit |
++---------------------+
+      v
++---------------------+
+|   ConnectionPool    |
++---------------------+
+      v
++---------------------+
+|   Driver (MySQL)    |
++---------------------+
 ```
 
-# 🧩 Example Migration
-
-```cpp
-#include <vix/orm/Migration.hpp>
-
-class CreateProductsTable : public Vix::orm::Migration {
-public:
-  std::string id() const override { return "2025_10_01_create_products"; }
-
-  void up(Vix::orm::Connection& c) override {
-      auto st = c.prepare("CREATE TABLE products (id INT AUTO_INCREMENT PRIMARY KEY, name VARCHAR(255))");
-      st->exec();
-  }
-
-  void down(Vix::orm::Connection& c) override {
-      auto st = c.prepare("DROP TABLE IF EXISTS products");
-      st->exec();
-  }
-};
-```
-
-# 🧰 Installation & Integration (for Vix.cpp)
-
-If you’re integrating this as a submodule in the main Vix.cpp project:
-
-```cmake
-# In vix/CMakeLists.txt
-add_subdirectory(modules/orm)
-target_link_libraries(vix_core PRIVATE vix_orm)
-```
-
-# 🧪 Testing (optional)
-
-Enable unit tests:
+### 🧪 Testing
 
 ```bash
-cmake -S .. -B . -DBUILD_TESTS=ON
+cmake -S . -B build -DVIX_ORM_BUILD_TESTS=ON
 ctest --output-on-failure
 ```
 
@@ -254,26 +417,22 @@ Please follow the steps below:
 
 1. Fork the repository.
 2. Create a new branch: git checkout -b feat/your-feature.
-3. Commit changes with clear messages.
-4. Run all builds/tests before pushing.
-5. Submit a Pull Request with a concise explanation.
+3. Follow C++20 style & Vix coding standards
+4. Commit changes with clear messages.
+5. Run all builds/tests before pushing.
+6. Submit a Pull Request with a concise explanation.
 
 ## License
 
-MIT License – see [LICENSE](../../LICENSE) for details.
+MIT License © Softadastra / Gaspard Kirira
+See LICENSE file for full details.
 
-💡 Credits
+## 🌟 Next Steps (Roadmap)
 
-Developed as part of the Vix.cpp Project
-by Softadastra -> https://softadastra.com
-— bringing high-performance C++ to the modern web.
-
-# 🌟 Next Steps
-
-. Implement ResultSet/ResultRow adapter for read operations
-. Add PostgreSQL driver
-. Expand QueryBuilder with JOIN, ORDER, and WHERE chaining
-. Provide Vix CLI integration (vix orm:make:migration)
-. Vix ORM — Designed for performance, built for clarity, and ready for the next generation of C++ backends.
-
-Vix ORM — Designed for performance, built for clarity, and ready for the next generation of C++ backends.
+1. ResultSet / Row adapter (typed reads)
+2. Full SQLite driver
+3. PostgreSQL driver
+4. Advanced QueryBuilder (JOIN, ORDER, GROUP…)
+5. CLI integration: vix orm:make:migration
+6. Relationship API (has_many, belongs_to)
+7. Validation layer for entities
