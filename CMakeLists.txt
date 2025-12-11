@@ -105,6 +105,7 @@ set(VIX_ORM_PUBLIC_HEADERS
   include/vix/orm/UnitOfWork.hpp
   include/vix/orm/Migration.hpp
   include/vix/orm/MigrationsRunner.hpp
+  include/vix/orm/Database.hpp
   include/vix/orm/orm.hpp
 )
 
@@ -116,6 +117,7 @@ set(VIX_ORM_SOURCES
   src/QueryBuilder.cpp
   src/Repository.cpp
   src/Transaction.cpp
+  src/Database.cpp
 )
 
 if(VIX_ORM_USE_SQLITE AND SQLite3_FOUND)

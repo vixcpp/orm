@@ -1,0 +1,13 @@
+{
+  "db": {
+    "engine": "mysql",
+    "host": "tcp://127.0.0.1:3306",
+    "user": "root",
+    "password": "",
+    "database": "softadastra_registry",
+    "pool": {
+      "min": 2,
+      "max": 10
+    }
+  }
+}

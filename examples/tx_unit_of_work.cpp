@@ -9,7 +9,7 @@
 #include <vix/orm/orm.hpp>
 #include <iostream>
 
-using namespace Vix::orm;
+using namespace vix::orm;
 
 int main(int argc, char **argv)
 {
@@ -22,11 +22,9 @@ int main(int argc, char **argv)
     {
         ConnectionPool pool{host, user, pass, db};
 
-        // Group two operations in one atomic unit
         UnitOfWork uow{pool};
         auto &c = uow.conn();
 
-        // Insert a user
         {
             auto st = c.prepare("INSERT INTO users(name,email,age) VALUES(?,?,?)");
             st->bind(1, std::string("Alice"));
@@ -35,7 +33,6 @@ int main(int argc, char **argv)
             st->exec();
         }
 
-        // Insert an order for that user (assume id=LAST_INSERT_ID())
         auto userId = c.lastInsertId();
         {
             auto st = c.prepare("INSERT INTO orders(user_id,total) VALUES(?,?)");

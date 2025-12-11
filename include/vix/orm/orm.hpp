@@ -5,6 +5,8 @@
 // instead of including individual headers manually.
 // ==========================================================
 
+#pragma once
+
 #include <vix/orm/Errors.hpp>
 #include <vix/orm/Drivers.hpp>
 #include <vix/orm/MySQLDriver.hpp>
@@ -18,10 +20,9 @@
 #include <vix/orm/Migration.hpp>
 #include <vix/orm/MigrationsRunner.hpp>
 
-namespace Vix::orm
+namespace vix::orm
 {
     inline void init()
     {
-        // Reserved for future global initialization (e.g., driver registry)
     }
 }

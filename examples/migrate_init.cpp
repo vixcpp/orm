@@ -10,7 +10,7 @@
 #include <vix/orm/orm.hpp>
 #include <iostream>
 
-using namespace Vix::orm;
+using namespace vix::orm;
 
 class CreateUsers : public Migration
 {
@@ -69,7 +69,6 @@ int main(int argc, char **argv)
 
     try
     {
-        // Direct connection (no pool needed just to migrate)
         auto raw = make_mysql_conn(host, user, pass, db);
         MySQLConnection conn{raw};
 
