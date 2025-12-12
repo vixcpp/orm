@@ -8,35 +8,40 @@
 # This is useful in CI, custom installations, or environments without proper config files.
 # ------------------------------------------------------------------------------
 
-# Abort if the imported target is already defined (e.g., by find_package)
+# MySQLCppConnAlias.cmake — Imported target fallback for MySQL Connector/C++
 if (TARGET MySQLCppConn::MySQLCppConn)
   return()
 endif()
 
-# ------------------------------------------------------------------------------
-# User-configurable variables (can be overridden via -D flags)
-# ------------------------------------------------------------------------------
+set(MYSQLCPPCONN_ROOT "" CACHE PATH "Root path to MySQL Connector/C++")
+set(MYSQLCPPCONN_LIB "" CACHE FILEPATH "Full path to libmysqlcppconn{8}.so/.a")
+set(MYSQLCPPCONN_INCLUDE_DIR "" CACHE PATH "Include directory containing cppconn/ or jdbc/")
 
-set(MYSQLCPPCONN_ROOT "" CACHE PATH "Root path to MySQL Connector/C++ (must contain include/ and lib/)")
-set(MYSQLCPPCONN_LIB "" CACHE FILEPATH "Full path to libmysqlcppconn{8}.so or .a")
-set(MYSQLCPPCONN_INCLUDE_DIR "" CACHE PATH "Include directory containing either cppconn/ or jdbc/")
-
-# ------------------------------------------------------------------------------
-# Step 0: Quick path for common Debian/Ubuntu installations
-# ------------------------------------------------------------------------------
-
-if (NOT MYSQLCPPCONN_LIB AND EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so")
-  set(MYSQLCPPCONN_LIB "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so" CACHE FILEPATH "" FORCE)
+# -----------------------------
+# Debian/Ubuntu: quick-path
+# -----------------------------
+# On Ubuntu, the real file is often libmysqlcppconn.so.7 (and a symlink libmysqlcppconn.so)
+if (NOT MYSQLCPPCONN_LIB)
+  if (EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so")
+    set(MYSQLCPPCONN_LIB "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so" CACHE FILEPATH "" FORCE)
+  elseif (EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so.7")
+    set(MYSQLCPPCONN_LIB "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so.7" CACHE FILEPATH "" FORCE)
+  elseif (EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so.8")
+    set(MYSQLCPPCONN_LIB "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so.8" CACHE FILEPATH "" FORCE)
+  endif()
 endif()
 
-if (NOT MYSQLCPPCONN_INCLUDE_DIR AND EXISTS "/usr/include/cppconn/connection.h")
-  set(MYSQLCPPCONN_INCLUDE_DIR "/usr/include" CACHE PATH "" FORCE)
+if (NOT MYSQLCPPCONN_INCLUDE_DIR)
+  if (EXISTS "/usr/include/cppconn/connection.h")
+    set(MYSQLCPPCONN_INCLUDE_DIR "/usr/include" CACHE PATH "" FORCE)
+  elseif (EXISTS "/usr/include/mysql-cppconn-8/jdbc/mysql_connection.h")
+    set(MYSQLCPPCONN_INCLUDE_DIR "/usr/include/mysql-cppconn-8" CACHE PATH "" FORCE)
+  endif()
 endif()
 
-# ------------------------------------------------------------------------------
-# Step 1–3: Attempt to locate the connector manually (library and headers)
-# ------------------------------------------------------------------------------
-
+# -----------------------------
+# Generic search (fallback)
+# -----------------------------
 set(_mysql_lib_hints
   ${MYSQLCPPCONN_ROOT}/lib
   ${MYSQLCPPCONN_ROOT}/lib64
@@ -50,15 +55,13 @@ set(_mysql_inc_hints
   /usr/include/mysql-cppconn-8
 )
 
-# Step 1: Try to locate the library if not already set
 if (NOT MYSQLCPPCONN_LIB)
   find_library(MYSQLCPPCONN_LIB
-    NAMES mysqlcppconn mysqlcppconn8
+    NAMES mysqlcppconn mysqlcppconn8 mysqlcppconn-static
     HINTS ${_mysql_lib_hints}
   )
 endif()
 
-# Step 2: Look for legacy (1.x) headers
 if (NOT MYSQLCPPCONN_INCLUDE_DIR)
   find_path(MYSQLCPPCONN_INCLUDE_DIR
     NAMES cppconn/connection.h
@@ -66,7 +69,6 @@ if (NOT MYSQLCPPCONN_INCLUDE_DIR)
   )
 endif()
 
-# Step 3: Look for modern (8.x) headers if legacy not found
 if (NOT MYSQLCPPCONN_INCLUDE_DIR)
   find_path(MYSQLCPPCONN_INCLUDE_DIR
     NAMES jdbc/mysql_connection.h
@@ -74,36 +76,35 @@ if (NOT MYSQLCPPCONN_INCLUDE_DIR)
   )
 endif()
 
-# ------------------------------------------------------------------------------
-# Step 4: If not found, do not block the configuration process
-# ------------------------------------------------------------------------------
-
+# -----------------------------
+# Not found -> do not hard fail
+# -----------------------------
 if (NOT MYSQLCPPCONN_LIB OR NOT MYSQLCPPCONN_INCLUDE_DIR)
   message(WARNING "[vix_orm] MySQLCppConn fallback: could not locate library or headers.")
-  message(WARNING "           You can set them manually using:")
   message(WARNING "           -DMYSQLCPPCONN_LIB=/path/to/libmysqlcppconn.so")
   message(WARNING "           -DMYSQLCPPCONN_INCLUDE_DIR=/path/to/include")
   return()
 endif()
 
-# ------------------------------------------------------------------------------
-# Step 5: Define the imported target manually
-# ------------------------------------------------------------------------------
-
-if (NOT TARGET MySQLCppConn::MySQLCppConn)
-  add_library(MySQLCppConn::MySQLCppConn UNKNOWN IMPORTED)
-endif()
+# -----------------------------
+# Define imported target
+# -----------------------------
+add_library(MySQLCppConn::MySQLCppConn UNKNOWN IMPORTED)
 
 set_target_properties(MySQLCppConn::MySQLCppConn PROPERTIES
   IMPORTED_LOCATION "${MYSQLCPPCONN_LIB}"
   INTERFACE_INCLUDE_DIRECTORIES "${MYSQLCPPCONN_INCLUDE_DIR}"
-  IMPORTED_LINK_INTERFACE_LANGUAGES "CXX"
 )
 
-# ------------------------------------------------------------------------------
-# Step 6: If using a static library (.a), link common dependencies
-# ------------------------------------------------------------------------------
+# IMPORTANT: ensure the link line actually gets the library
+# (some generators behave better when it is also in INTERFACE_LINK_LIBRARIES)
+set_property(TARGET MySQLCppConn::MySQLCppConn PROPERTY
+  INTERFACE_LINK_LIBRARIES "${MYSQLCPPCONN_LIB}"
+)
 
+# -----------------------------
+# Static library extra deps
+# -----------------------------
 get_filename_component(_ext "${MYSQLCPPCONN_LIB}" EXT)
 if (_ext STREQUAL ".a")
   find_package(OpenSSL REQUIRED)
@@ -112,10 +113,6 @@ if (_ext STREQUAL ".a")
     INTERFACE_LINK_LIBRARIES OpenSSL::SSL OpenSSL::Crypto ZLIB::ZLIB
   )
 endif()
-
-# ------------------------------------------------------------------------------
-# Done: Output the configuration summary
-# ------------------------------------------------------------------------------
 
 message(STATUS "[orm] MySQLCppConn alias configured:")
 message(STATUS "       LIB: ${MYSQLCPPCONN_LIB}")
