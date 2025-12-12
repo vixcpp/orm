@@ -1,11 +1,14 @@
-#ifndef VIX_MYSQL_DRIVER_HPP
-#define VIX_MYSQL_DRIVER_HPP
+#pragma once
+
+#if VIX_ORM_HAS_MYSQL
 
 #include <vix/orm/Drivers.hpp>
+
 #include <cppconn/connection.h>
 #include <cppconn/prepared_statement.h>
 #include <cppconn/resultset.h>
 #include <mysql_driver.h>
+
 #include <memory>
 #include <string>
 
@@ -43,17 +46,17 @@ namespace vix::orm
         const std::shared_ptr<sql::Connection> &raw() const { return conn_; }
     };
 
-    std::shared_ptr<sql::Connection> make_mysql_conn(const std::string &host,
-                                                     const std::string &user,
-                                                     const std::string &pass,
-                                                     const std::string &db);
+    std::shared_ptr<sql::Connection>
+    make_mysql_conn(const std::string &host,
+                    const std::string &user,
+                    const std::string &pass,
+                    const std::string &db);
 
     std::function<std::shared_ptr<Connection>()>
     make_mysql_factory(std::string host,
                        std::string user,
                        std::string pass,
                        std::string db);
+}
 
-} // namespace vix::orm
-
-#endif // VIX_MYSQL_DRIVER_HPP
+#endif // VIX_ORM_HAS_MYSQL

@@ -149,6 +149,13 @@ endif()
 add_library(vix_orm STATIC ${VIX_ORM_SOURCES} ${VIX_ORM_PUBLIC_HEADERS})
 add_library(vix::orm ALIAS vix_orm)
 
+# Keep feature macros consistent everywhere (build + consumers)
+# (define them ONCE; do NOT redefine them again later)
+target_compile_definitions(vix_orm PUBLIC
+  VIX_ORM_HAS_MYSQL=$<BOOL:${VIX_ORM_HAS_MYSQL}>
+  VIX_ORM_HAS_SQLITE=$<BOOL:${VIX_ORM_HAS_SQLITE}>
+)
+
 # export name => installed imported target is vix::orm
 set_target_properties(vix_orm PROPERTIES EXPORT_NAME orm)
 
@@ -188,9 +195,6 @@ endif()
 if (VIX_ORM_HAS_MYSQL)
   target_include_directories(vix_orm PUBLIC "${MYSQLCPPCONN_INCLUDE_DIR}")
   target_link_libraries(vix_orm PUBLIC "${MYSQLCPPCONN_LIB}")
-  target_compile_definitions(vix_orm PUBLIC VIX_ORM_HAS_MYSQL=1)
-else()
-  target_compile_definitions(vix_orm PUBLIC VIX_ORM_HAS_MYSQL=0)
 endif()
 
 # SQLite linkage
@@ -200,9 +204,6 @@ if (VIX_ORM_HAS_SQLITE)
   else()
     message(WARNING "[vix_orm] sqlite enabled but no target found; linkage skipped.")
   endif()
-  target_compile_definitions(vix_orm PUBLIC VIX_ORM_HAS_SQLITE=1)
-else()
-  target_compile_definitions(vix_orm PUBLIC VIX_ORM_HAS_SQLITE=0)
 endif()
 
 # ============================================================
@@ -211,6 +212,7 @@ endif()
 if (VIX_ORM_BUILD_EXAMPLES)
   add_executable(vix_orm_users examples/users_crud.cpp)
   target_link_libraries(vix_orm_users PRIVATE vix::orm)
+
   if (MSVC)
     target_compile_options(vix_orm_users PRIVATE ${_WARNINGS_MSVC})
   else()

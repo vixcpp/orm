@@ -9,7 +9,9 @@
 
 #include <vix/orm/Errors.hpp>
 #include <vix/orm/Drivers.hpp>
+#if VIX_ORM_HAS_MYSQL
 #include <vix/orm/MySQLDriver.hpp>
+#endif
 #include <vix/orm/ConnectionPool.hpp>
 #include <vix/orm/Transaction.hpp>
 #include <vix/orm/QueryBuilder.hpp>
