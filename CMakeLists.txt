@@ -143,6 +143,11 @@ if (VIX_ORM_HAS_SQLITE)
   list(APPEND VIX_ORM_SOURCES       src/SqliteDriver.cpp)
 endif()
 
+# If building ORM standalone (not from umbrella), bring core as subdir
+if (NOT TARGET vix::core)
+  add_subdirectory(../core core_build)
+endif()
+
 # ============================================================
 # library target
 # ============================================================
@@ -163,7 +168,8 @@ target_include_directories(vix_orm PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-
+# ✅ ORM depends on Vix Core (Config.hpp, http, json, etc.)
+target_link_libraries(vix_orm PUBLIC vix::core)
 if (MSVC)
   target_compile_options(vix_orm PRIVATE ${_WARNINGS_MSVC})
 else()
