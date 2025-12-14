@@ -1,5 +1,7 @@
 #include <vix/orm/Database.hpp>
+#if VIX_ORM_HAS_MYSQL
 #include <vix/orm/MySQLDriver.hpp>
+#endif
 #include <vix/config/Config.hpp>
 
 #include <stdexcept>
@@ -7,6 +9,7 @@
 
 namespace vix::orm
 {
+#if VIX_ORM_HAS_MYSQL
     ConnectionFactory make_mysql_factory(const MySQLConfig &cfg)
     {
         return [cfg]() -> ConnectionPtr
@@ -16,6 +19,7 @@ namespace vix::orm
             return std::static_pointer_cast<Connection>(mysql_conn);
         };
     }
+#endif
 
     DbConfig make_db_config_from_vix_config(const vix::config::Config &cfg)
     {

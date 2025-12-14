@@ -1,5 +1,7 @@
-#include <vix/orm/MySQLDriver.hpp>
+
 #include <vix/orm/Errors.hpp>
+#if VIX_ORM_HAS_MYSQL
+#include <vix/orm/MySQLDriver.hpp>
 
 #include <cppconn/statement.h>
 #include <mysql_driver.h>
@@ -202,3 +204,5 @@ namespace vix::orm
     }
 
 } // namespace vix::orm
+
+#endif
