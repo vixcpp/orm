@@ -6,52 +6,13 @@
 #include <vix/orm/orm.hpp>
 #include <vix/orm/ConnectionPool.hpp>
 #include <vix/orm/MySQLDriver.hpp>
-
 #include <iostream>
-#include <string>
+#include <vector>
 
-struct User
-{
-    std::int64_t id{};
-    std::string name;
-    std::string email;
-    int age{};
-};
-
-namespace vix::orm
-{
-    template <>
-    struct Mapper<User>
-    {
-        static User fromRow(const ResultRow &)
-        {
-            return {};
-        }
-
-        static std::vector<std::pair<std::string, std::any>> toInsertParams(const User &u)
-        {
-            return {
-                {"name", u.name},
-                {"email", u.email},
-                {"age", u.age},
-            };
-        }
-
-        static std::vector<std::pair<std::string, std::any>> toUpdateParams(const User &u)
-        {
-            return {
-                {"name", u.name},
-                {"email", u.email},
-                {"age", u.age},
-            };
-        }
-    };
-} // namespace vix::orm
+using namespace vix::orm;
 
 int main(int argc, char **argv)
 {
-    using namespace vix::orm;
-
     std::string host = (argc > 1 ? argv[1] : "tcp://127.0.0.1:3306");
     std::string user = (argc > 2 ? argv[2] : "root");
     std::string pass = (argc > 3 ? argv[3] : "");
@@ -62,21 +23,40 @@ int main(int argc, char **argv)
         auto factory = make_mysql_factory(host, user, pass, db);
 
         PoolConfig cfg;
-        cfg.min = 2;
-        cfg.max = 16;
+        cfg.min = 1;
+        cfg.max = 8;
 
         ConnectionPool pool{factory, cfg};
         pool.warmup();
 
-        BaseRepository<User> users{pool, "users"};
+        Transaction tx(pool);
+        auto &c = tx.conn();
 
-        std::uint64_t id = users.create(User{
-            0,
-            "Gaspard",
-            "gaspardkirira@outlook.com",
-            28});
+        auto st = c.prepare("INSERT INTO users(name,email,age) VALUES(?,?,?)");
 
-        std::cout << "[OK] Insert user → id=" << id << "\n";
+        struct Row
+        {
+            const char *name;
+            const char *email;
+            int age;
+        };
+        std::vector<Row> rows = {
+            {"Zoe", "zoe@example.com", 23},
+            {"Mina", "mina@example.com", 31},
+            {"Omar", "omar@example.com", 35},
+        };
+
+        std::uint64_t total = 0;
+        for (const auto &r : rows)
+        {
+            st->bind(1, r.name);
+            st->bind(2, r.email);
+            st->bind(3, r.age);
+            total += st->exec();
+        }
+
+        tx.commit();
+        std::cout << "[OK] inserted rows = " << total << "\n";
         return 0;
     }
     catch (const std::exception &e)

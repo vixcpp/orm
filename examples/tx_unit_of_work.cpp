@@ -7,7 +7,11 @@
  */
 
 #include <vix/orm/orm.hpp>
+#include <vix/orm/ConnectionPool.hpp>
+#include <vix/orm/MySQLDriver.hpp>
+
 #include <iostream>
+#include <string>
 
 using namespace vix::orm;
 
@@ -20,7 +24,14 @@ int main(int argc, char **argv)
 
     try
     {
-        ConnectionPool pool{host, user, pass, db};
+        auto factory = make_mysql_factory(host, user, pass, db);
+
+        PoolConfig cfg;
+        cfg.min = 1;
+        cfg.max = 8;
+
+        ConnectionPool pool{factory, cfg};
+        pool.warmup();
 
         UnitOfWork uow{pool};
         auto &c = uow.conn();
@@ -33,7 +44,8 @@ int main(int argc, char **argv)
             st->exec();
         }
 
-        auto userId = c.lastInsertId();
+        const auto userId = c.lastInsertId();
+
         {
             auto st = c.prepare("INSERT INTO orders(user_id,total) VALUES(?,?)");
             st->bind(1, static_cast<std::int64_t>(userId));

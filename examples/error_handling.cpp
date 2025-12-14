@@ -10,6 +10,8 @@ using namespace vix::orm;
 
 int main(int argc, char **argv)
 {
+    (void)argc;
+    (void)argv;
     try
     {
         // Intentionally wrong DB name to show error

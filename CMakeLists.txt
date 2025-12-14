@@ -13,6 +13,7 @@ option(VIX_ORM_REQUIRE_MYSQL     "Fail if MySQL requested but not found"     OFF
 
 option(VIX_ORM_USE_SQLITE        "Enable SQLite3 driver"                     OFF)
 option(VIX_ORM_ENABLE_SANITIZERS "Enable sanitizers in Debug builds"         ON)
+option(VIX_ORM_BUILD_TOOLS "Build ORM CLI tools (migrator)" ON)
 
 # ---------------- language / PIC ----------------
 set(CMAKE_CXX_STANDARD 20)
@@ -121,6 +122,8 @@ set(VIX_ORM_PUBLIC_HEADERS
   include/vix/orm/MigrationsRunner.hpp
   include/vix/orm/Database.hpp
   include/vix/orm/orm.hpp
+  include/vix/orm/FileMigrationsRunner.hpp
+  include/vix/orm/Sha256.hpp
 )
 
 set(VIX_ORM_SOURCES
@@ -131,6 +134,8 @@ set(VIX_ORM_SOURCES
   src/Repository.cpp
   src/Transaction.cpp
   src/Database.cpp
+  src/FileMigrationsRunner.cpp
+  src/Sha256.cpp
 )
 
 if (VIX_ORM_HAS_MYSQL)
@@ -148,11 +153,33 @@ if (NOT TARGET vix::core)
   add_subdirectory(../core core_build)
 endif()
 
-# ============================================================
 # library target
-# ============================================================
 add_library(vix_orm STATIC ${VIX_ORM_SOURCES} ${VIX_ORM_PUBLIC_HEADERS})
 add_library(vix::orm ALIAS vix_orm)
+
+# tools (migrator)  NOT an example
+if (VIX_ORM_BUILD_TOOLS)
+  add_executable(vix_orm_migrator)
+
+  target_sources(vix_orm_migrator PRIVATE
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/migrator/main.cpp
+    ${CMAKE_CURRENT_SOURCE_DIR}/tools/migrator/MigratorCLI.cpp
+  )
+
+  target_link_libraries(vix_orm_migrator PRIVATE vix::orm)
+  target_compile_features(vix_orm_migrator PRIVATE cxx_std_20)
+
+  if (MSVC)
+    target_compile_options(vix_orm_migrator PRIVATE ${_WARNINGS_MSVC})
+  else()
+    target_compile_options(vix_orm_migrator PRIVATE ${_WARNINGS_GNU})
+  endif()
+
+  install(TARGETS vix_orm_migrator
+    RUNTIME DESTINATION ${CMAKE_INSTALL_LIBEXECDIR}/vix
+  )
+endif()
+
 
 # Keep feature macros consistent everywhere (build + consumers)
 # (define them ONCE; do NOT redefine them again later)
@@ -168,7 +195,7 @@ target_include_directories(vix_orm PUBLIC
   $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/include>
   $<INSTALL_INTERFACE:${CMAKE_INSTALL_INCLUDEDIR}>
 )
-# ✅ ORM depends on Vix Core (Config.hpp, http, json, etc.)
+# ORM depends on Vix Core (Config.hpp, http, json, etc.)
 target_link_libraries(vix_orm PUBLIC vix::core)
 if (MSVC)
   target_compile_options(vix_orm PRIVATE ${_WARNINGS_MSVC})
@@ -176,15 +203,7 @@ else()
   target_compile_options(vix_orm PRIVATE ${_WARNINGS_GNU})
 endif()
 
-# sanitizers (Debug only)
-if (CMAKE_BUILD_TYPE MATCHES "Debug" AND VIX_ORM_ENABLE_SANITIZERS AND NOT MSVC)
-  target_compile_options(vix_orm PRIVATE ${_SAN_DBG_GNU})
-  target_link_options(vix_orm PRIVATE ${_SAN_DBG_GNU})
-endif()
-
-# ============================================================
 # deps / defines
-# ============================================================
 if (spdlog_FOUND)
   # accept either target name
   if (TARGET spdlog::spdlog_header_only)
@@ -215,27 +234,70 @@ endif()
 # ============================================================
 # examples
 # ============================================================
-if (VIX_ORM_BUILD_EXAMPLES)
-  add_executable(vix_orm_users examples/users_crud.cpp)
-  target_link_libraries(vix_orm_users PRIVATE vix::orm)
+
+function(vix_enable_sanitizers tgt)
+  if (CMAKE_BUILD_TYPE MATCHES "Debug"
+      AND VIX_ORM_ENABLE_SANITIZERS
+      AND NOT MSVC)
+    target_compile_options(${tgt} PRIVATE -fsanitize=address,undefined)
+    target_link_options(${tgt} PRIVATE -fsanitize=address,undefined)
+  endif()
+endfunction()
+
+function(vix_add_orm_example name file)
+  add_executable(${name} ${file})
+  target_link_libraries(${name} PRIVATE vix::orm)
 
   if (MSVC)
-    target_compile_options(vix_orm_users PRIVATE ${_WARNINGS_MSVC})
+    target_compile_options(${name} PRIVATE ${_WARNINGS_MSVC})
   else()
-    target_compile_options(vix_orm_users PRIVATE ${_WARNINGS_GNU})
+    target_compile_options(${name} PRIVATE ${_WARNINGS_GNU})
   endif()
+
+  vix_enable_sanitizers(${name})
+endfunction()
+
+if (VIX_ORM_BUILD_EXAMPLES)
+
+  vix_add_orm_example(batch_insert_tx
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/batch_insert_tx.cpp)
+
+  vix_add_orm_example(vix_orm_users
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/users_crud.cpp)
+
+  vix_add_orm_example(querybuilder_update
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/querybuilder_update.cpp)
+
+  vix_add_orm_example(repository_crud_full
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/repository_crud_full.cpp)
+
+  vix_add_orm_example(tx_unit_of_work
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
+
+  vix_add_orm_example(users_crud_internal
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/users_crud_internal.cpp)
+
+  vix_add_orm_example(error_handling
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/error_handling.cpp)
+
+  vix_add_orm_example(migrate_init
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/migrate_init.cpp)
+
 endif()
 
 # ============================================================
 # install / export via umbrella export-set "VixTargets"
 # ============================================================
-install(TARGETS vix_orm
-  EXPORT  VixTargets
-  ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
-  RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
-  INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
-)
+if (DEFINED VIX_UMBRELLA_BUILD) # ou un flag que tu définis depuis l’umbrella
+  install(TARGETS vix_orm EXPORT VixTargets ...)
+else()
+  install(TARGETS vix_orm
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
+endif()
 
 install(DIRECTORY include/
   DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
