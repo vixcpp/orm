@@ -12,7 +12,6 @@ option(VIX_ORM_USE_MYSQL         "Enable MySQL Connector/C++ driver"         ON)
 option(VIX_ORM_REQUIRE_MYSQL     "Fail if MySQL requested but not found"     OFF)
 
 option(VIX_ORM_USE_SQLITE        "Enable SQLite3 driver"                     OFF)
-option(VIX_ORM_ENABLE_SANITIZERS "Enable sanitizers in Debug builds"         ON)
 option(VIX_ORM_BUILD_TOOLS "Build ORM CLI tools (migrator)" ON)
 
 # ---------------- language / PIC ----------------
@@ -26,7 +25,6 @@ set(_WARNINGS_GNU
   -Wnon-virtual-dtor -Wold-style-cast -Woverloaded-virtual -Wpedantic
 )
 set(_WARNINGS_MSVC /W4 /permissive-)
-set(_SAN_DBG_GNU -fsanitize=address,undefined)
 
 # ---------------- optional deps ----------------
 find_package(spdlog QUIET CONFIG)
@@ -197,6 +195,10 @@ target_include_directories(vix_orm PUBLIC
 )
 # ORM depends on Vix Core (Config.hpp, http, json, etc.)
 target_link_libraries(vix_orm PUBLIC vix::core)
+# Inherit umbrella sanitizers if present
+if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
+  target_link_libraries(vix_orm PUBLIC vix_sanitizers)
+endif()
 if (MSVC)
   target_compile_options(vix_orm PRIVATE ${_WARNINGS_MSVC})
 else()
@@ -234,27 +236,19 @@ endif()
 # ============================================================
 # examples
 # ============================================================
-
-function(vix_enable_sanitizers tgt)
-  if (CMAKE_BUILD_TYPE MATCHES "Debug"
-      AND VIX_ORM_ENABLE_SANITIZERS
-      AND NOT MSVC)
-    target_compile_options(${tgt} PRIVATE -fsanitize=address,undefined)
-    target_link_options(${tgt} PRIVATE -fsanitize=address,undefined)
-  endif()
-endfunction()
-
 function(vix_add_orm_example name file)
   add_executable(${name} ${file})
   target_link_libraries(${name} PRIVATE vix::orm)
+
+  if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
+     target_link_libraries(${name} PRIVATE vix_sanitizers)
+  endif()
 
   if (MSVC)
     target_compile_options(${name} PRIVATE ${_WARNINGS_MSVC})
   else()
     target_compile_options(${name} PRIVATE ${_WARNINGS_GNU})
   endif()
-
-  vix_enable_sanitizers(${name})
 endfunction()
 
 if (VIX_ORM_BUILD_EXAMPLES)
@@ -288,8 +282,14 @@ endif()
 # ============================================================
 # install / export via umbrella export-set "VixTargets"
 # ============================================================
-if (DEFINED VIX_UMBRELLA_BUILD) # ou un flag que tu définis depuis l’umbrella
-  install(TARGETS vix_orm EXPORT VixTargets ...)
+if (DEFINED VIX_UMBRELLA_BUILD)
+  install(TARGETS vix_orm
+    EXPORT  VixTargets
+    ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+    INCLUDES DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}
+  )
 else()
   install(TARGETS vix_orm
     ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
