@@ -2,9 +2,11 @@
 
 #include <vix/orm/orm.hpp>
 #include <vix/orm/FileMigrationsRunner.hpp>
+#include <vix/orm/Drivers.hpp>
 
 #include <iostream>
 #include <stdexcept>
+#include <memory>
 
 namespace vix::orm::tools
 {
@@ -158,30 +160,46 @@ namespace vix::orm::tools
                 return 0;
             }
 
-            // Connect (MySQL)
-            auto raw = vix::orm::make_mysql_conn(opt.host, opt.user, opt.pass, opt.db);
-            vix::orm::MySQLConnection conn{raw};
+            // Connect (DB) - Drivers.hpp API
+            vix::orm::ConnectionPtr conn;
+            std::unique_ptr<vix::orm::FileMigrationsRunner> runner;
 
-            // Run migrations from files
-            vix::orm::FileMigrationsRunner runner{conn, opt.migrationsDir};
+#if VIX_ORM_HAS_MYSQL
+            {
+                auto factory = vix::orm::make_mysql_factory(opt.host, opt.user, opt.pass, opt.db);
+                conn = factory(); // returns std::shared_ptr<Connection>
+                runner = std::make_unique<vix::orm::FileMigrationsRunner>(*conn, opt.migrationsDir);
+            }
+#elif VIX_ORM_HAS_SQLITE
+            {
+                // Si tu ajoutes make_sqlite_factory plus tard
+                auto factory = vix::orm::make_sqlite_factory(opt.db);
+                conn = factory();
+                runner = std::make_unique<vix::orm::FileMigrationsRunner>(*conn, opt.migrationsDir);
+            }
+#else
+            std::cerr << "[ERR] vix_orm_migrator built without DB drivers.\n"
+                      << "Enable one with:\n"
+                      << "  -DVIX_ORM_HAS_MYSQL=1 (or add SQLite support)\n";
+            return 1;
+#endif
 
             if (opt.command == "migrate")
             {
-                runner.applyAll();
+                runner->applyAll();
                 std::cout << "[OK] migrations applied\n";
                 return 0;
             }
 
             if (opt.command == "rollback")
             {
-                runner.rollback(opt.steps);
+                runner->rollback(opt.steps);
                 std::cout << "[OK] rollback " << opt.steps << " step(s)\n";
                 return 0;
             }
 
             if (opt.command == "status")
             {
-                // Minimal status (tant que runner.status() n’existe pas)
                 std::cout << "[OK] migrations dir: " << opt.migrationsDir << "\n";
                 std::cout << "Tip: implement FileMigrationsRunner::status() to show applied vs pending.\n";
                 return 0;
@@ -197,4 +215,5 @@ namespace vix::orm::tools
             return 1;
         }
     }
+
 } // namespace vix::orm::tools
