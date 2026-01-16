@@ -1,3 +1,15 @@
+/**
+ *
+ *  @file Transaction.hpp
+ *  @author Gaspard Kirira
+ *
+ *  Copyright 2025, Gaspard Kirira.  All rights reserved.
+ *  https://github.com/vixcpp/vix
+ *  Use of this source code is governed by a MIT license
+ *  that can be found in the License file.
+ *
+ *  Vix.cpp
+ */
 #ifndef VIX_TRANSACTION_HPP
 #define VIX_TRANSACTION_HPP
 
@@ -5,44 +17,44 @@
 
 namespace vix::orm
 {
-    class Transaction
+  class Transaction
+  {
+    PooledConn pooled_;
+    bool active_ = true;
+
+  public:
+    explicit Transaction(ConnectionPool &pool)
+        : pooled_(pool)
     {
-        PooledConn pooled_;
-        bool active_ = true;
+      pooled_.get().begin();
+    }
 
-    public:
-        explicit Transaction(ConnectionPool &pool)
-            : pooled_(pool)
+    ~Transaction()
+    {
+      if (active_)
+        try
         {
-            pooled_.get().begin();
+          pooled_.get().rollback();
         }
-
-        ~Transaction()
+        catch (...)
         {
-            if (active_)
-                try
-                {
-                    pooled_.get().rollback();
-                }
-                catch (...)
-                {
-                }
         }
+    }
 
-        void commit()
-        {
-            pooled_.get().commit();
-            active_ = false;
-        }
+    void commit()
+    {
+      pooled_.get().commit();
+      active_ = false;
+    }
 
-        void rollback()
-        {
-            pooled_.get().rollback();
-            active_ = false;
-        }
+    void rollback()
+    {
+      pooled_.get().rollback();
+      active_ = false;
+    }
 
-        Connection &conn() { return pooled_.get(); }
-    };
+    Connection &conn() { return pooled_.get(); }
+  };
 } // namespace Vix::orm
 
 #endif // VIX_TRANSACTION_HPP

@@ -1,10 +1,19 @@
+#  @file CMakeLists.cpp
+#  @author Gaspard Kirira
+#
+#  Copyright 2025, Gaspard Kirira.  All rights reserved.
+#  https://github.com/vixcpp/vix
+#  Use of this source code is governed by a MIT license
+#  that can be found in the License file.
+#
+#  Vix.cpp | ORM module
 cmake_minimum_required(VERSION 3.20)
 
 project(vix_orm VERSION 1.2.1 LANGUAGES CXX)
 
 include(GNUInstallDirs)
 
-# ---------------- options ----------------
+# options
 option(VIX_ORM_BUILD_TESTS       "Build unit tests for Vix ORM"               OFF)
 option(VIX_ORM_BUILD_EXAMPLES    "Build examples for Vix ORM"                ON)
 
@@ -14,30 +23,27 @@ option(VIX_ORM_REQUIRE_MYSQL     "Fail if MySQL requested but not found"     OFF
 option(VIX_ORM_USE_SQLITE        "Enable SQLite3 driver"                     OFF)
 option(VIX_ORM_BUILD_TOOLS "Build ORM CLI tools (migrator)" ON)
 
-# ---------------- language / PIC ----------------
+# language / PIC
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_POSITION_INDEPENDENT_CODE ON)
 
-# ---------------- warnings / sanitizers ----------------
+# warnings / sanitizers
 set(_WARNINGS_GNU
   -Wall -Wextra -Wshadow -Wconversion
   -Wnon-virtual-dtor -Wold-style-cast -Woverloaded-virtual -Wpedantic
 )
 set(_WARNINGS_MSVC /W4 /permissive-)
 
-# ---------------- optional deps ----------------
+# optional deps
 find_package(spdlog QUIET CONFIG)
 
-# ============================================================
-# MySQL detection (robust) — enable only if lib+headers found
-# ============================================================
+# MySQL detection
 set(VIX_ORM_HAS_MYSQL OFF)
 set(MYSQLCPPCONN_LIB "")
 set(MYSQLCPPCONN_INCLUDE_DIR "")
 
 if (VIX_ORM_USE_MYSQL)
-  # 1) Try common Ubuntu paths directly (since the system lib exists)
   if (EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so")
     set(MYSQLCPPCONN_LIB "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so")
   elseif (EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so.7")
@@ -48,7 +54,6 @@ if (VIX_ORM_USE_MYSQL)
     set(MYSQLCPPCONN_INCLUDE_DIR "/usr/include")
   endif()
 
-  # 2) Fallback search if not found
   if (NOT MYSQLCPPCONN_LIB)
     find_library(MYSQLCPPCONN_LIB
       NAMES mysqlcppconn mysqlcppconn8
@@ -63,7 +68,6 @@ if (VIX_ORM_USE_MYSQL)
     )
   endif()
 
-  # 3) Final decision
   if (MYSQLCPPCONN_LIB AND MYSQLCPPCONN_INCLUDE_DIR)
     set(VIX_ORM_HAS_MYSQL ON)
     message(STATUS "[vix_orm] mysql: enabled")
@@ -78,9 +82,7 @@ if (VIX_ORM_USE_MYSQL)
   endif()
 endif()
 
-# ============================================================
 # SQLite detection (soft)
-# ============================================================
 set(VIX_ORM_HAS_SQLITE OFF)
 set(_VIX_SQLITE_TARGET "")
 
@@ -103,9 +105,7 @@ if (VIX_ORM_USE_SQLITE)
   endif()
 endif()
 
-# ============================================================
 # sources / headers
-# ============================================================
 set(VIX_ORM_PUBLIC_HEADERS
   include/vix/orm/Errors.hpp
   include/vix/orm/Drivers.hpp
@@ -180,7 +180,6 @@ endif()
 
 
 # Keep feature macros consistent everywhere (build + consumers)
-# (define them ONCE; do NOT redefine them again later)
 target_compile_definitions(vix_orm PUBLIC
   VIX_ORM_HAS_MYSQL=$<BOOL:${VIX_ORM_HAS_MYSQL}>
   VIX_ORM_HAS_SQLITE=$<BOOL:${VIX_ORM_HAS_SQLITE}>
@@ -233,9 +232,7 @@ if (VIX_ORM_HAS_SQLITE)
   endif()
 endif()
 
-# ============================================================
 # examples
-# ============================================================
 function(vix_add_orm_example name file)
   add_executable(${name} ${file})
   target_link_libraries(${name} PRIVATE vix::orm)
@@ -255,33 +252,20 @@ if (VIX_ORM_BUILD_EXAMPLES)
 
   vix_add_orm_example(batch_insert_tx
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/batch_insert_tx.cpp)
-
   vix_add_orm_example(vix_orm_users
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/users_crud.cpp)
-
   vix_add_orm_example(querybuilder_update
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/querybuilder_update.cpp)
-
   vix_add_orm_example(repository_crud_full
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/repository_crud_full.cpp)
-
   vix_add_orm_example(tx_unit_of_work
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
-
-  vix_add_orm_example(users_crud_internal
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/users_crud_internal.cpp)
-
   vix_add_orm_example(error_handling
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/error_handling.cpp)
 
-  vix_add_orm_example(migrate_init
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/migrate_init.cpp)
-
 endif()
 
-# ============================================================
 # install / export via umbrella export-set "VixTargets"
-# ============================================================
 if (DEFINED VIX_UMBRELLA_BUILD)
   install(TARGETS vix_orm
     EXPORT  VixTargets
