@@ -1,46 +1,49 @@
-# Prerequisites
-*.d
-
-# Compiled Object files
-*.slo
-*.lo
+build/
+build-*/
 *.o
 *.obj
-
-# Precompiled Headers
-*.gch
-*.pch
-
-# Linker files
-*.ilk
-
-# Debugger Files
-*.pdb
-
-# Compiled Dynamic libraries
-*.so
-*.dylib
-*.dll
-
-# Fortran module files
-*.mod
-*.smod
-
-# Compiled Static libraries
+*.lo
+*.slo
 *.lai
 *.la
 *.a
 *.lib
-
-# Executables
+*.so
+*.dylib
+*.dll
 *.exe
 *.out
 *.app
-
-# debug information files
+*.gch
+*.pch
 *.dwo
-cmd.md
-text.md
-build/
+*.d
 .vscode/
+.idea/
+*.swp
+*.swo
+*.bak
+*.tmp
+compile_commands.json
+CMakeCache.txt
+CMakeFiles/
+cmake_install.cmake
+*.log
 vix.log
+text.md
+cmd.md
+text.txt
+cmd.txt
+scripts/changelog-release.sh
+scripts/update_changelog.sh
+build-ref/
+build-rel/
+hello_server
+/hello_world/
+*.bak
+db.sql
+revoir.md
+main.cpp
+.vix-scripts
+
+

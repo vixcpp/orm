@@ -8,7 +8,6 @@
 # This is useful in CI, custom installations, or environments without proper config files.
 # ------------------------------------------------------------------------------
 
-# MySQLCppConnAlias.cmake — Imported target fallback for MySQL Connector/C++
 if (TARGET MySQLCppConn::MySQLCppConn)
   return()
 endif()
@@ -17,10 +16,7 @@ set(MYSQLCPPCONN_ROOT "" CACHE PATH "Root path to MySQL Connector/C++")
 set(MYSQLCPPCONN_LIB "" CACHE FILEPATH "Full path to libmysqlcppconn{8}.so/.a")
 set(MYSQLCPPCONN_INCLUDE_DIR "" CACHE PATH "Include directory containing cppconn/ or jdbc/")
 
-# -----------------------------
 # Debian/Ubuntu: quick-path
-# -----------------------------
-# On Ubuntu, the real file is often libmysqlcppconn.so.7 (and a symlink libmysqlcppconn.so)
 if (NOT MYSQLCPPCONN_LIB)
   if (EXISTS "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so")
     set(MYSQLCPPCONN_LIB "/usr/lib/x86_64-linux-gnu/libmysqlcppconn.so" CACHE FILEPATH "" FORCE)
@@ -39,9 +35,7 @@ if (NOT MYSQLCPPCONN_INCLUDE_DIR)
   endif()
 endif()
 
-# -----------------------------
 # Generic search (fallback)
-# -----------------------------
 set(_mysql_lib_hints
   ${MYSQLCPPCONN_ROOT}/lib
   ${MYSQLCPPCONN_ROOT}/lib64
@@ -76,9 +70,7 @@ if (NOT MYSQLCPPCONN_INCLUDE_DIR)
   )
 endif()
 
-# -----------------------------
 # Not found -> do not hard fail
-# -----------------------------
 if (NOT MYSQLCPPCONN_LIB OR NOT MYSQLCPPCONN_INCLUDE_DIR)
   message(WARNING "[vix_orm] MySQLCppConn fallback: could not locate library or headers.")
   message(WARNING "           -DMYSQLCPPCONN_LIB=/path/to/libmysqlcppconn.so")
@@ -86,9 +78,7 @@ if (NOT MYSQLCPPCONN_LIB OR NOT MYSQLCPPCONN_INCLUDE_DIR)
   return()
 endif()
 
-# -----------------------------
 # Define imported target
-# -----------------------------
 add_library(MySQLCppConn::MySQLCppConn UNKNOWN IMPORTED)
 
 set_target_properties(MySQLCppConn::MySQLCppConn PROPERTIES
@@ -96,15 +86,11 @@ set_target_properties(MySQLCppConn::MySQLCppConn PROPERTIES
   INTERFACE_INCLUDE_DIRECTORIES "${MYSQLCPPCONN_INCLUDE_DIR}"
 )
 
-# IMPORTANT: ensure the link line actually gets the library
-# (some generators behave better when it is also in INTERFACE_LINK_LIBRARIES)
 set_property(TARGET MySQLCppConn::MySQLCppConn PROPERTY
   INTERFACE_LINK_LIBRARIES "${MYSQLCPPCONN_LIB}"
 )
 
-# -----------------------------
 # Static library extra deps
-# -----------------------------
 get_filename_component(_ext "${MYSQLCPPCONN_LIB}" EXT)
 if (_ext STREQUAL ".a")
   find_package(OpenSSL REQUIRED)
