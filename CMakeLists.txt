@@ -48,10 +48,7 @@ set(VIX_ORM_PUBLIC_HEADERS
 )
 
 set(VIX_ORM_SOURCES
-  src/Mapper.cpp
   src/QueryBuilder.cpp
-  src/Repository.cpp
-  src/UnitOfWork.cpp
 )
 
 # ------------------------------------------------------------------------------

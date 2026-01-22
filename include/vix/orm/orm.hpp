@@ -19,5 +19,6 @@
 #include <vix/orm/Mapper.hpp>
 #include <vix/orm/Repository.hpp>
 #include <vix/orm/UnitOfWork.hpp>
+#include <vix/orm/db_compat.hpp>
 
 #endif

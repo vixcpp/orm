@@ -13,7 +13,7 @@
 #ifndef VIX_UNIT_OF_WORK_HPP
 #define VIX_UNIT_OF_WORK_HPP
 
-#include <vix/db/Transaction.hpp>
+#include <vix/orm/db_compat.hpp>
 
 namespace vix::orm
 {
@@ -22,11 +22,21 @@ namespace vix::orm
     vix::db::Transaction tx_;
 
   public:
-    explicit UnitOfWork(vix::db::ConnectionPool &pool) : tx_(pool) {}
+    explicit UnitOfWork(vix::db::ConnectionPool &pool)
+        : tx_(pool) {}
+
+    UnitOfWork(const UnitOfWork &) = delete;
+    UnitOfWork &operator=(const UnitOfWork &) = delete;
+
+    UnitOfWork(UnitOfWork &&) noexcept = default;
+    UnitOfWork &operator=(UnitOfWork &&) noexcept = default;
+
     void commit() { tx_.commit(); }
     void rollback() { tx_.rollback(); }
+
     vix::db::Connection &conn() { return tx_.conn(); }
+    const vix::db::Connection &conn() const { return const_cast<UnitOfWork *>(this)->tx_.conn(); }
   };
-} // namespace Vix::orm
+} // namespace vix::orm
 
 #endif // VIX_UNIT_OF_WORK_HPP

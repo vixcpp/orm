@@ -13,11 +13,15 @@
 #ifndef VIX_REPOSITORY_HPP
 #define VIX_REPOSITORY_HPP
 
-#include <vix/db/ConnectionPool.hpp>
+#include <vix/orm/db_compat.hpp>
 #include <vix/orm/Mapper.hpp>
+
+#include <cstddef>
+#include <cstdint>
 #include <optional>
-#include <vector>
 #include <string>
+#include <utility>
+#include <vector>
 
 namespace vix::orm
 {
@@ -27,35 +31,68 @@ namespace vix::orm
     vix::db::ConnectionPool &pool_;
     std::string table_;
 
+    static std::string build_insert_cols(const std::vector<std::pair<std::string, std::any>> &params)
+    {
+      std::string cols;
+      cols.reserve(64);
+
+      for (std::size_t i = 0; i < params.size(); ++i)
+      {
+        cols += params[i].first;
+        if (i + 1 < params.size())
+          cols += ",";
+      }
+      return cols;
+    }
+
+    static std::string build_insert_qs(std::size_t n)
+    {
+      std::string qs;
+      qs.reserve(32);
+
+      for (std::size_t i = 0; i < n; ++i)
+      {
+        qs += "?";
+        if (i + 1 < n)
+          qs += ",";
+      }
+      return qs;
+    }
+
+    static std::string build_update_set(const std::vector<std::pair<std::string, std::any>> &params)
+    {
+      std::string set;
+      set.reserve(128);
+
+      for (std::size_t i = 0; i < params.size(); ++i)
+      {
+        set += params[i].first;
+        set += "=?";
+        if (i + 1 < params.size())
+          set += ",";
+      }
+      return set;
+    }
+
   public:
     BaseRepository(vix::db::ConnectionPool &pool, std::string table)
         : pool_(pool), table_(std::move(table)) {}
 
     std::uint64_t create(const T &v)
     {
-      auto params = Mapper<T>::toInsertParams(v);
+      const auto params = Mapper<T>::toInsertParams(v);
 
-      std::string cols, qs;
-      cols.reserve(64);
-      qs.reserve(32);
+      const std::string cols = build_insert_cols(params);
+      const std::string qs = build_insert_qs(params.size());
 
-      for (std::size_t i = 0; i < params.size(); ++i)
-      {
-        cols += params[i].first;
-        qs += "?";
-        if (i + 1 < params.size())
-        {
-          cols += ",";
-          qs += ",";
-        }
-      }
+      const std::string sql =
+          "INSERT INTO " + table_ + " (" + cols + ") VALUES (" + qs + ")";
 
-      auto sql = "INSERT INTO " + table_ + " (" + cols + ") VALUES (" + qs + ")";
       vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare(sql);
 
       for (std::size_t i = 0; i < params.size(); ++i)
-        st->bind(i + 1, params[i].second);
+        st->bind(i + 1, any_to_dbvalue_or_throw(params[i].second));
 
       st->exec();
       return pc.get().lastInsertId();
@@ -63,37 +100,37 @@ namespace vix::orm
 
     std::optional<T> findById(std::int64_t id)
     {
-      auto sql = "SELECT * FROM " + table_ + " WHERE id = ? LIMIT 1";
+      const std::string sql =
+          "SELECT * FROM " + table_ + " WHERE id = ? LIMIT 1";
+
       vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare(sql);
       st->bind(1, id);
-      auto rs = st->query();
 
-      return std::nullopt;
+      auto rs = st->query();
+      if (!rs || !rs->next())
+        return std::nullopt;
+
+      // Mapper<T>::fromRow expects a ResultRow
+      return Mapper<T>::fromRow(rs->row());
     }
 
     std::uint64_t updateById(std::int64_t id, const T &v)
     {
-      auto params = Mapper<T>::toUpdateParams(v);
+      const auto params = Mapper<T>::toUpdateParams(v);
 
-      std::string set;
-      set.reserve(128);
-      for (std::size_t i = 0; i < params.size(); ++i)
-      {
-        set += params[i].first + "=?";
-        if (i + 1 < params.size())
-          set += ",";
-      }
+      const std::string set = build_update_set(params);
+      const std::string sql =
+          "UPDATE " + table_ + " SET " + set + " WHERE id=?";
 
-      auto sql = "UPDATE " + table_ + " SET " + set + " WHERE id=?";
       vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare(sql);
 
       std::size_t idx = 1;
-      for (auto &[k, vv] : params)
-        st->bind(idx++, vv);
-      st->bind(idx, id);
+      for (const auto &kv : params)
+        st->bind(idx++, any_to_dbvalue_or_throw(kv.second));
 
+      st->bind(idx, id);
       return st->exec();
     }
 
@@ -106,6 +143,6 @@ namespace vix::orm
     }
   };
 
-} // namespace Vix::orm
+} // namespace vix::orm
 
 #endif // VIX_REPOSITORY_HPP
