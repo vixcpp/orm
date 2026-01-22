@@ -13,10 +13,8 @@
 #include <vix/orm/QueryBuilder.hpp>
 
 #include <sstream>
-#include <type_traits>
 #include <utility>
 #include <vector>
-#include <any>
 
 namespace vix::orm::qb_internal
 {
@@ -25,7 +23,7 @@ namespace vix::orm::qb_internal
     if (n == 0)
       return {};
     std::string s;
-    s.reserve(n * 3); // "?, " * (n-1) + "?"
+    s.reserve(n * 3);
     for (std::size_t i = 0; i < n; ++i)
     {
       s.push_back('?');
@@ -44,12 +42,13 @@ namespace vix::orm::qb_internal
     using std::begin;
     using std::end;
     const auto n = static_cast<std::size_t>(std::distance(begin(values), end(values)));
+
     qb.raw("IN (").raw(join_placeholders(n)).raw(")");
+
     for (const auto &v : values)
-    {
-      qb.param(std::any{v});
-    }
+      qb.param(v);
+
     return qb;
   }
 
-} // namespace Vix::orm::qb_internal
+} // namespace vix::orm::qb_internal

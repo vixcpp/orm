@@ -12,19 +12,19 @@
  */
 
 #include <vix/orm/orm.hpp>
-#include <vix/orm/ConnectionPool.hpp>
-#include <vix/orm/MySQLDriver.hpp>
+
 #include <iostream>
+#include <string>
 #include <vector>
 
 using namespace vix::orm;
 
 int main(int argc, char **argv)
 {
-  std::string host = (argc > 1 ? argv[1] : "tcp://127.0.0.1:3306");
-  std::string user = (argc > 2 ? argv[2] : "root");
-  std::string pass = (argc > 3 ? argv[3] : "");
-  std::string db = (argc > 4 ? argv[4] : "vixdb");
+  const std::string host = (argc > 1 ? argv[1] : "tcp://127.0.0.1:3306");
+  const std::string user = (argc > 2 ? argv[2] : "root");
+  const std::string pass = (argc > 3 ? argv[3] : "");
+  const std::string db = (argc > 4 ? argv[4] : "vixdb");
 
   try
   {
@@ -48,7 +48,8 @@ int main(int argc, char **argv)
       const char *email;
       int age;
     };
-    std::vector<Row> rows = {
+
+    const std::vector<Row> rows = {
         {"Gaspard", "gaspardkirira@outlook.com", 23},
         {"Mina", "mina@example.com", 31},
         {"Omar", "omar@example.com", 35},

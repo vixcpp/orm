@@ -43,7 +43,6 @@ hello_server
 *.bak
 db.sql
 revoir.md
-main.cpp
 .vix-scripts
 
 
