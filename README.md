@@ -1,438 +1,155 @@
-# 🧩 Vix ORM — Modern C++ Object-Relational Mapper
+# Vix ORM
 
-**Vix ORM** is the official database abstraction module for the **Vix.cpp Framework** — a high-performance C++ backend ecosystem inspired by FastAPI, Vue.js, and modern data engineering practices.
+<p align="center">
+  <strong>A thin, explicit ORM layer for modern C++</strong><br/>
+  No magic · No hidden queries · No performance tax
+</p>
 
-It provides a clean, type-safe, and connection-pooled interface to interact with **MySQL** and **SQLite**, designed with:
-
-- Modern C++20 features
-- Connection pooling
-- Transaction management
-- Query builders
-- Repository & Mapper pattern
-- Extensible driver interface for multiple databases
-
----
-
-## 🚀 Features
-
-| Category                  | Description                                                   |
-| ------------------------- | ------------------------------------------------------------- |
-| **Drivers**               | MySQL (via MySQL Connector/C++) and SQLite (optional)         |
-| **Connection Pool**       | Thread-safe, min/max configurable pool with automatic release |
-| **Transactions**          | RAII-based commit/rollback handling                           |
-| **Query Builder**         | Fluent SQL construction with type-safe parameter binding      |
-| **Repository Pattern**    | Generic data repositories for CRUD operations                 |
-| **Migration System**      | Lightweight migration runner for schema evolution             |
-| **Header-Only Utilities** | `Mapper<T>`, `QueryBuilder`, `Transaction`, and helpers       |
-| **Integration-Ready**     | Used internally by `Vix::core` and `Vix::orm` modules         |
+<p align="center">
+  <img src="https://img.shields.io/badge/C%2B%2B-20-blue" />
+  <img src="https://img.shields.io/badge/License-MIT-green" />
+  <img src="https://img.shields.io/badge/Status-Active-success" />
+</p>
 
 ---
 
-## 🏗️ Project Structure
+## What is Vix ORM?
 
-```swift
-vixcpp/orm/
-├── CMakeLists.txt
-├── include/vix/orm/
-│   ├── ConnectionPool.hpp
-│   ├── Drivers.hpp
-│   ├── Entity.hpp
-│   ├── Errors.hpp
-│   ├── Mapper.hpp
-│   ├── Migration.hpp
-│   ├── MigrationsRunner.hpp
-│   ├── MySQLDriver.hpp
-│   ├── orm.hpp
-│   ├── QueryBuilder.hpp
-│   ├── Repository.hpp
-│   ├── Transaction.hpp
-│   ├── UnitOfWork.hpp
-├── src/
-│   ├── ConnectionPool.cpp
-│   ├── MigrationsRunner.cpp
-│   ├── MySQLDriver.cpp
-│   ├── QueryBuilder.cpp
-│   ├── Repository.cpp
-│   ├── Transaction.cpp
-├── examples/
-│   └── users_crud.cpp
-└── cmake/
-    ├── VixOrmConfig.cmake.in
-    └── MySQLCppConnAlias.cmake
-```
+**Vix ORM** is the optional object-mapping layer of **Vix.cpp**.
+
+It provides a **lightweight, intentional abstraction** on top of **Vix DB**
+for developers who want:
+
+- cleaner domain models
+- structured repositories
+- safer data access patterns
+
+…without giving up **control, predictability, or performance**.
+
+Vix ORM is not designed to hide the database.
+It is designed to **organize your code**, not obscure what happens underneath.
 
 ---
 
-## ⚙️ Build Instructions
+## Why another ORM?
 
-### 1️⃣ Prerequisites
+Most ORMs today:
 
-#### On Ubuntu/Debian:
+- try to abstract SQL completely
+- generate complex, unpredictable queries
+- hide transactions and connections
+- make performance issues hard to diagnose
 
-```bash
-sudo apt update
-sudo apt install -y cmake g++ pkg-config libspdlog-dev libsqlite3-dev libmysqlcppconn-dev
-```
+Vix ORM takes a different path.
 
-#### Optional (manual MySQL Connector)
+> **SQL is still there.
+> The database is still visible.
+> The cost model stays explicit.**
 
-If not installed via APT:
+You always know:
+- when a query runs
+- inside which transaction
+- on which connection
+- with which performance implications
 
-```bash
-export MYSQLCPPCONN_ROOT=/opt/mysql-connector-cpp
-```
+---
 
-### 2️⃣ Configure and Build
+## A “sugar layer”, not a framework
 
-```bash
-mkdir -p build && cd build
-cmake -S .. -B . \
-  -DCMAKE_BUILD_TYPE=Release \
-  -DVIX_ORM_BUILD_EXAMPLES=ON \
-  -DVIX_ORM_USE_MYSQL=ON \
-  -DVIX_ORM_USE_SQLITE=OFF
-cmake --build . -j
-```
+Vix ORM is intentionally **thin**.
 
-Optional: Debug build with sanitizers
+It focuses on:
+- mapping rows to objects
+- organizing queries in repositories
+- grouping operations with unit-of-work patterns
 
-```bash
-cmake -S .. -B . \
-  -DCMAKE_BUILD_TYPE=Debug \
-  -DVIX_ORM_USE_MYSQL=ON
-cmake --build . -j
-```
+It does **not**:
+- invent its own query language
+- auto-generate schemas
+- introduce runtime reflection
+- enforce a specific architecture
 
-## 🧱 Core Concepts
+You stay in control.
 
-### 1️⃣ DbConfig — The Database Configuration Model
+---
 
-```cpp
-DbConfig cfg;
-cfg.engine = DbEngine::MySQL;
+## Built on top of Vix DB
 
-cfg.mysql.host = "tcp://127.0.0.1:3306";
-cfg.mysql.user = "root";
-cfg.mysql.password = "";
-cfg.mysql.database = "vixdb";
-cfg.mysql.pool = {1, 8};
-```
+Vix ORM is powered by **Vix DB**, the low-level database layer of Vix.cpp.
 
-### 2️⃣ Database — High-level database entry point
+That means:
+- explicit transactions
+- predictable pooling behavior
+- no hidden drivers
+- no duplicate database logic
 
-```cpp
-Database db{cfg};
-auto& pool = db.pool();
-```
+If you ever outgrow the ORM,
+you can drop down to Vix DB **without rewriting your application**.
 
-### 3️⃣ ConnectionPool
+---
 
-```cpp
-PooledConn pc(pool);
-auto& c = pc.get();
+## When should you use Vix ORM?
 
-auto st = c.prepare("SELECT 1");
-st->exec();
-```
+Vix ORM is a good fit if you:
 
-### 4️⃣ Mapper<T>
+- want structure without magic
+- prefer repositories over raw SQL everywhere
+- value performance and debuggability
+- build long-lived C++ systems
+- dislike “active record everywhere” patterns
 
-```cpp
-template<>
-struct Mapper<User> {
-    static auto toInsertParams(const User& u) {
-        return std::vector<std::pair<std::string, std::any>>{
-            {"name", u.name},
-            {"email", u.email},
-            {"age", u.age}
-        };
-    }
-};
-```
+If you want full control, you can skip it.
+If you want light structure, it’s there.
 
-### 5️⃣ Repository<T>
+---
 
-```cpp
-Repository<User> users{db.pool(), "users"};
-auto id = users.create(User{"Alice", "alice@example.com", 27});
-```
+## Modern C++ by design
 
-### 6️⃣ Transactions / UnitOfWork
+Vix ORM is built with modern C++ principles:
 
-```cpp
-UnitOfWork uow{db.pool()};
-auto& c = uow.conn();
+- C++20
+- explicit ownership
+- RAII for safety
+- compile-time clarity
+- minimal abstractions
 
-c.prepare("INSERT INTO logs(msg) VALUES(?)")
-    ->bind(1, "hello")->exec();
-
-uow.commit();
-```
+No macros.
+No code generation.
+No runtime surprises.
 
-### 7️⃣ QueryBuilder
+---
 
-```cpp
-QueryBuilder qb;
-qb.raw("UPDATE users SET age=? WHERE email=?")
-  .param(29)
-  .param("zoe@example.com");
-```
+## Part of the Vix.cpp ecosystem
 
-### 🧰 Usage Examples
+Vix ORM is an **optional module** of **Vix.cpp**.
 
-#### ✔️ Insert with Repository
+It integrates seamlessly with:
+- Vix Core
+- Vix DB
+- Vix CLI
+- WebSocket & network modules
 
-```cpp
-DbConfig cfg = make_db_config_from_vix_config(vix::config::Config::getInstance());
-Database db{cfg};
+Use only what you need.
 
-Repository<User> users{db.pool(), "users"};
-auto id = users.create({0, "Gaspard", "gaspard@example.com", 28});
-std::cout << "User inserted with id=" << id << "\n";
-```
+---
 
-### ✔️ UnitOfWork with Automatic Rollback
+## Getting started
 
-```cpp
-UnitOfWork uow{db.pool()};
-auto& c = uow.conn();
+Vix ORM is built automatically when enabled through the Vix.cpp umbrella.
 
-// Insert user
-c.prepare("INSERT INTO users(name,email,age) VALUES(?,?,?)")
-    ->bind(1, "Alice")
-    ->bind(2, "alice@example.com")
-    ->bind(3, 27)
-    ->exec();
+For setup, examples, and usage, start from the main repository:
 
-auto userId = c.lastInsertId();
+👉 https://github.com/vixcpp/vix
 
-// Insert order
-c.prepare("INSERT INTO orders(user_id,total) VALUES(?,?)")
-    ->bind(1, userId)
-    ->bind(2, 150.0)
-    ->exec();
+---
 
-uow.commit();
-```
+## ⭐ Support the project
 
-### ✔️ QueryBuilder UPDATE
+If you believe ORMs should be:
+- explicit
+- predictable
+- performance-aware
 
-```cpp
-QueryBuilder qb;
-qb.raw("UPDATE users SET age=? WHERE email=?")
-  .param(30)
-  .param("mina@example.com");
+please consider starring **Vix.cpp**.
 
-PooledConn pc(db.pool());
-auto st = pc.get().prepare(qb.sql());
-
-// bind params
-const auto& ps = qb.params();
-for (size_t i = 0; i < ps.size(); ++i)
-    st->bind(i + 1, ps[i]);
-st->exec();
-```
-
-### ✔️ Migrations Example
-
-```cpp
-class CreateUsers : public Migration {
-public:
-std::string id() const override { return "2025_10_10_create_users"; }
-
-    void up(Connection& c) override {
-        c.prepare(
-            "CREATE TABLE IF NOT EXISTS users("
-            " id BIGINT PRIMARY KEY AUTO_INCREMENT,"
-            " name VARCHAR(120),"
-            " email VARCHAR(190),"
-            " age INT )")->exec();
-    }
-
-};
-```
-
-### Running:
-
-```cpp
-auto raw = make_mysql_conn(host, user, pass, db);
-MySQLConnection conn{raw};
-
-MigrationsRunner runner{conn};
-CreateUsers m1;
-runner.add(&m1);
-runner.runAll();
-```
-
-### 🧠 Usage Example
-
-Example: Simple CRUD (examples/users_crud.cpp)
-
-```cpp
-DbConfig cfg = make_db_config_from_vix_config(
-    vix::config::Config::getInstance()
-);
-
-Database db{cfg};
-
-Repository<User> users{db.pool(), "users"};
-auto id = users.create({0, "Gaspard", "gaspard@example.com", 28});
-
-std::cout << "User inserted with id=" << id << "\n";
-```
-
-### ✔️ UnitOfWork Transaction Example
-
-```cpp
-UnitOfWork uow{db.pool()};
-auto& c = uow.conn();
-
-// Insert user
-c.prepare("INSERT INTO users(name,email,age) VALUES(?,?,?)")
-    ->bind(1, "Alice")
-    ->bind(2, "alice@example.com")
-    ->bind(3, 27)
-    ->exec();
-
-auto userId = c.lastInsertId();
-
-// Insert order
-c.prepare("INSERT INTO orders(user_id,total) VALUES(?,?)")
-    ->bind(1, userId)
-    ->bind(2, 150.0)
-    ->exec();
-
-uow.commit();
-```
-
-### ✔️ QueryBuilder UPDATE Example
-
-```cpp
-QueryBuilder qb;
-qb.raw("UPDATE users SET age=? WHERE email=?")
-  .param(29)
-  .param("zoe@example.com");
-
-PooledConn pc(db.pool());
-auto st = pc.get().prepare(qb.sql());
-
-const auto& params = qb.params();
-for (size_t i = 0; i < params.size(); ++i)
-    st->bind(i + 1, params[i]);
-
-auto affected = st->exec();
-```
-
-### ✔️ Migrations Example
-
-```cpp
-class CreateUsers : public Migration {
-public:
-    std::string id() const override { return "2025_10_10_create_users"; }
-
-    void up(Connection& c) override {
-        c.prepare(
-            "CREATE TABLE IF NOT EXISTS users("
-            " id BIGINT AUTO_INCREMENT PRIMARY KEY,"
-            " name VARCHAR(120),"
-            " email VARCHAR(190),"
-            " age INT)"
-        )->exec();
-    }
-
-    void down(Connection& c) override {
-        c.prepare("DROP TABLE IF EXISTS users")->exec();
-    }
-};
-```
-
-# Run:
-
-```bash
-./examples/vix_orm_users
-# or
-./examples/vix_orm_users "tcp://127.0.0.1:3306" root "<password>" vixdb
-```
-
-# Expected output:
-
-```bash
-[OK] Insert user → id=1
-```
-
-# Module Overview
-
-```markdown
-### 🧩 Module Overview
-
-| **Component**             | **Role / Responsibility**                                                       |
-| ------------------------- | ------------------------------------------------------------------------------- |
-| `Drivers.hpp`             | Abstract base interface for all database drivers.                               |
-| `MySQLDriver.hpp/.cpp`    | Concrete implementation for MySQL using Connector/C++.                          |
-| `ConnectionPool.hpp/.cpp` | Manages reusable, thread-safe database connections.                             |
-| `Repository.hpp`          | Provides generic CRUD operations for mapped entities.                           |
-| `Mapper.hpp`              | Template specialization for mapping C++ entities to database tables and fields. |
-| `Transaction.hpp`         | RAII helper to manage transactions (begin/commit/rollback) safely.              |
-| `QueryBuilder.hpp`        | Fluent interface to construct SQL queries with parameter binding support.       |
-| `MigrationsRunner.hpp`    | Discovers and runs migration classes implementing the `Migration` base class.   |
-| `Migration.hpp`           | Base class for defining database schema migrations in a structured way.         |
-```
-
-# 🧱 Architecture
-
-```lua
-App / Services
-       |
-       v
-+---------------------+
-|     Repository<T>   |
-+---------------------+
-      | uses Mapper<T>
-      v
-+---------------------+
-|    UnitOfWork       |
-|  Transaction/Commit |
-+---------------------+
-      v
-+---------------------+
-|   ConnectionPool    |
-+---------------------+
-      v
-+---------------------+
-|   Driver (MySQL)    |
-+---------------------+
-```
-
-### 🧪 Testing
-
-```bash
-cmake -S . -B build -DVIX_ORM_BUILD_TESTS=ON
-ctest --output-on-failure
-```
-
-# 🤝 Contributing
-
-Contributions are welcome!
-Please follow the steps below:
-
-1. Fork the repository.
-2. Create a new branch: git checkout -b feat/your-feature.
-3. Follow C++20 style & Vix coding standards
-4. Commit changes with clear messages.
-5. Run all builds/tests before pushing.
-6. Submit a Pull Request with a concise explanation.
-
-## License
-
-MIT License © Softadastra / Gaspard Kirira
-See LICENSE file for full details.
-
-## 🌟 Next Steps (Roadmap)
-
-1. ResultSet / Row adapter (typed reads)
-2. Full SQLite driver
-3. PostgreSQL driver
-4. Advanced QueryBuilder (JOIN, ORDER, GROUP…)
-5. CLI integration: vix orm:make:migration
-6. Relationship API (has_many, belongs_to)
-7. Validation layer for entities
+MIT License
