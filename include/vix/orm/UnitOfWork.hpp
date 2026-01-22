@@ -13,19 +13,19 @@
 #ifndef VIX_UNIT_OF_WORK_HPP
 #define VIX_UNIT_OF_WORK_HPP
 
-#include <vix/orm/Transaction.hpp>
+#include <vix/db/Transaction.hpp>
 
 namespace vix::orm
 {
   class UnitOfWork
   {
-    Transaction tx_;
+    vix::db::Transaction tx_;
 
   public:
-    explicit UnitOfWork(ConnectionPool &pool) : tx_(pool) {}
+    explicit UnitOfWork(vix::db::ConnectionPool &pool) : tx_(pool) {}
     void commit() { tx_.commit(); }
     void rollback() { tx_.rollback(); }
-    Connection &conn() { return tx_.conn(); }
+    vix::db::Connection &conn() { return tx_.conn(); }
   };
 } // namespace Vix::orm
 

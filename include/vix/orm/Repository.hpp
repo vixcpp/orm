@@ -13,7 +13,7 @@
 #ifndef VIX_REPOSITORY_HPP
 #define VIX_REPOSITORY_HPP
 
-#include <vix/orm/ConnectionPool.hpp>
+#include <vix/db/ConnectionPool.hpp>
 #include <vix/orm/Mapper.hpp>
 #include <optional>
 #include <vector>
@@ -24,11 +24,11 @@ namespace vix::orm
   template <class T>
   class BaseRepository
   {
-    ConnectionPool &pool_;
+    vix::db::ConnectionPool &pool_;
     std::string table_;
 
   public:
-    BaseRepository(ConnectionPool &pool, std::string table)
+    BaseRepository(vix::db::ConnectionPool &pool, std::string table)
         : pool_(pool), table_(std::move(table)) {}
 
     std::uint64_t create(const T &v)
@@ -51,7 +51,7 @@ namespace vix::orm
       }
 
       auto sql = "INSERT INTO " + table_ + " (" + cols + ") VALUES (" + qs + ")";
-      PooledConn pc(pool_);
+      vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare(sql);
 
       for (std::size_t i = 0; i < params.size(); ++i)
@@ -64,7 +64,7 @@ namespace vix::orm
     std::optional<T> findById(std::int64_t id)
     {
       auto sql = "SELECT * FROM " + table_ + " WHERE id = ? LIMIT 1";
-      PooledConn pc(pool_);
+      vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare(sql);
       st->bind(1, id);
       auto rs = st->query();
@@ -86,7 +86,7 @@ namespace vix::orm
       }
 
       auto sql = "UPDATE " + table_ + " SET " + set + " WHERE id=?";
-      PooledConn pc(pool_);
+      vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare(sql);
 
       std::size_t idx = 1;
@@ -99,7 +99,7 @@ namespace vix::orm
 
     std::uint64_t removeById(std::int64_t id)
     {
-      PooledConn pc(pool_);
+      vix::db::PooledConn pc(pool_);
       auto st = pc.get().prepare("DELETE FROM " + table_ + " WHERE id = ?");
       st->bind(1, id);
       return st->exec();
