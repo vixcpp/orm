@@ -24,7 +24,9 @@
 #include <vix/db/mig/FileMigrationsRunner.hpp>
 #include <vix/db/mig/MigrationsRunner.hpp>
 #include <vix/db/Sha256.hpp>
+#if VIX_DB_HAS_MYSQL
 #include <vix/db/drivers/mysql/MySQLDriver.hpp>
+#endif
 
 #include <any>
 #include <cstdint>
@@ -52,7 +54,9 @@ namespace vix::orm
   using vix::db::Transaction;
 
   using vix::db::DBError;
+#if VIX_DB_HAS_MYSQL
   using vix::db::make_mysql_factory;
+#endif
 
   inline vix::db::DbValue any_to_dbvalue_or_throw(const std::any &a)
   {
