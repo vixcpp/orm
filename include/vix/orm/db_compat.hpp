@@ -3,8 +3,10 @@
  *  @file db_compat.hpp
  *  @author Gaspard Kirira
  *
- *  Copyright 2025, Gaspard Kirira.  All rights reserved.
+ *  Copyright 2025, Gaspard Kirira.
+ *  All rights reserved.
  *  https://github.com/vixcpp/vix
+ *
  *  Use of this source code is governed by a MIT license
  *  that can be found in the License file.
  *
@@ -37,6 +39,16 @@
 
 namespace vix::orm
 {
+  /**
+   * @brief ORM compatibility layer for the vix::db module.
+   *
+   * This header provides:
+   * - Type aliases that re-export vix::db core types into vix::orm
+   * - Small utilities used by the ORM implementation to interact with the DB layer
+   *
+   * The goal is to keep ORM-facing code concise while avoiding repeated
+   * fully-qualified names in ORM components.
+   */
   using vix::db::Connection;
   using vix::db::ConnectionFactory;
   using vix::db::ConnectionPool;
@@ -53,11 +65,36 @@ namespace vix::orm
   using vix::db::Statement;
   using vix::db::Transaction;
 
+  /// Base error type used by the DB layer
   using vix::db::DBError;
+
 #if VIX_DB_HAS_MYSQL
+  /// Convenience factory for MySQL connections (available only when MySQL is enabled)
   using vix::db::make_mysql_factory;
 #endif
 
+  /**
+   * @brief Convert a std::any value into a vix::db::DbValue.
+   *
+   * This function is used by the ORM to bind runtime/erased values
+   * into prepared statements via the DB layer.
+   *
+   * Supported input types:
+   * - empty std::any / std::nullptr_t                  -> NULL
+   * - vix::db::DbValue                                 -> passthrough
+   * - bool                                             -> bool
+   * - integral types (signed/unsigned, including size_t)-> int64 (best-effort narrowing)
+   * - float/double                                     -> double
+   * - std::string, const std::string                   -> string
+   * - std::string_view                                 -> string copy
+   * - const char*, char*                               -> string copy (nullptr -> "")
+   * - vix::db::Blob                                    -> blob
+   *
+   * @param a Input value stored as std::any.
+   * @return DbValue suitable for statement binding.
+   *
+   * @throws vix::db::DBError if the stored type is not supported.
+   */
   inline vix::db::DbValue any_to_dbvalue_or_throw(const std::any &a)
   {
     using vix::db::Blob;

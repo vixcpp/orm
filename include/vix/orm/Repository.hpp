@@ -3,8 +3,10 @@
  *  @file Repository.hpp
  *  @author Gaspard Kirira
  *
- *  Copyright 2025, Gaspard Kirira.  All rights reserved.
+ *  Copyright 2025, Gaspard Kirira.
+ *  All rights reserved.
  *  https://github.com/vixcpp/vix
+ *
  *  Use of this source code is governed by a MIT license
  *  that can be found in the License file.
  *
@@ -25,13 +27,28 @@
 
 namespace vix::orm
 {
+  /**
+   * @brief Generic repository for ORM entities.
+   *
+   * BaseRepository<T> provides a minimal CRUD interface for an
+   * ORM entity mapped to a single database table.
+   *
+   * Assumptions:
+   * - The underlying table uses a primary key column named "id"
+   * - The Mapper<T> specialization defines how the entity is
+   *   serialized/deserialized
+   *
+   * This class intentionally avoids complex query abstraction
+   * and focuses on predictable, explicit SQL.
+   */
   template <class T>
   class BaseRepository
   {
     vix::db::ConnectionPool &pool_;
     std::string table_;
 
-    static std::string build_insert_cols(const std::vector<std::pair<std::string, std::any>> &params)
+    static std::string
+    build_insert_cols(const std::vector<std::pair<std::string, std::any>> &params)
     {
       std::string cols;
       cols.reserve(64);
@@ -59,7 +76,8 @@ namespace vix::orm
       return qs;
     }
 
-    static std::string build_update_set(const std::vector<std::pair<std::string, std::any>> &params)
+    static std::string
+    build_update_set(const std::vector<std::pair<std::string, std::any>> &params)
     {
       std::string set;
       set.reserve(128);
@@ -75,9 +93,23 @@ namespace vix::orm
     }
 
   public:
+    /**
+     * @brief Construct a repository bound to a table.
+     *
+     * @param pool  Connection pool used for queries.
+     * @param table Database table name.
+     */
     BaseRepository(vix::db::ConnectionPool &pool, std::string table)
         : pool_(pool), table_(std::move(table)) {}
 
+    /**
+     * @brief Insert a new entity.
+     *
+     * Uses Mapper<T>::toInsertParams to build the INSERT statement.
+     *
+     * @param v Entity instance.
+     * @return Generated primary key (last insert id).
+     */
     std::uint64_t create(const T &v)
     {
       const auto params = Mapper<T>::toInsertParams(v);
@@ -98,6 +130,12 @@ namespace vix::orm
       return pc.get().lastInsertId();
     }
 
+    /**
+     * @brief Find an entity by its primary key.
+     *
+     * @param id Primary key value.
+     * @return Entity instance if found, otherwise std::nullopt.
+     */
     std::optional<T> findById(std::int64_t id)
     {
       const std::string sql =
@@ -111,10 +149,18 @@ namespace vix::orm
       if (!rs || !rs->next())
         return std::nullopt;
 
-      // Mapper<T>::fromRow expects a ResultRow
       return Mapper<T>::fromRow(rs->row());
     }
 
+    /**
+     * @brief Update an entity by its primary key.
+     *
+     * Uses Mapper<T>::toUpdateParams to generate column assignments.
+     *
+     * @param id Primary key value.
+     * @param v  Entity instance.
+     * @return Number of affected rows.
+     */
     std::uint64_t updateById(std::int64_t id, const T &v)
     {
       const auto params = Mapper<T>::toUpdateParams(v);
@@ -134,6 +180,12 @@ namespace vix::orm
       return st->exec();
     }
 
+    /**
+     * @brief Delete an entity by its primary key.
+     *
+     * @param id Primary key value.
+     * @return Number of affected rows.
+     */
     std::uint64_t removeById(std::int64_t id)
     {
       vix::db::PooledConn pc(pool_);
