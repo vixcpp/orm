@@ -19,43 +19,34 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Set up ${{ matrix.compiler }}
-        run: |
-          if [ "${{ matrix.compiler }}" = "gcc" ]; then
-            sudo apt-get update
-            sudo apt-get install -y g++-12
-            echo "CXX=g++-12" >> $GITHUB_ENV
-            echo "CC=gcc-12" >> $GITHUB_ENV
-          else
-            sudo apt-get update
-            sudo apt-get install -y clang
-            echo "CXX=clang++" >> $GITHUB_ENV
-            echo "CC=clang" >> $GITHUB_ENV
-          fi
-
-      - name: Install dependencies
+      - name: Install build tools + deps
         run: |
           sudo apt-get update
-          sudo apt-get install -y cmake make ninja-build \
-                                  libboost-all-dev \
-                                  nlohmann-json3-dev \
-                                  libspdlog-dev \
-                                  libmysqlcppconn-dev
+          sudo apt-get install -y cmake ninja-build
 
-      - name: Configure (Release)
+          # compilers
+          if [ "${{ matrix.compiler }}" = "gcc" ]; then
+            sudo apt-get install -y gcc-12 g++-12
+            echo "CC=gcc-12" >> $GITHUB_ENV
+            echo "CXX=g++-12" >> $GITHUB_ENV
+          else
+            sudo apt-get install -y clang
+            echo "CC=clang" >> $GITHUB_ENV
+            echo "CXX=clang++" >> $GITHUB_ENV
+          fi
+
+          # optional deps used by orm/db
+          sudo apt-get install -y libspdlog-dev libmysqlcppconn-dev
+
+      - name: Configure (Release, ORM standalone)
         run: |
-          cmake -S . -B build -G Ninja \
+          cmake -S modules/orm -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
-            -DVIX_BUILD_EXAMPLES=ON \
-            -DVIX_BUILD_TESTS=ON \
-            -DVIX_ORM_USE_MYSQL=ON \
-            -DVIX_ORM_BUILD_EXAMPLES=OFF \
-            -DVIX_ORM_BUILD_TESTS=OFF
+            -DVIX_ORM_BUILD_EXAMPLES=ON \
+            -DVIX_ORM_BUILD_TESTS=ON
 
       - name: Build
         run: cmake --build build -j
 
       - name: Run tests
-        run: |
-          ctest --test-dir build --output-on-failure || true
-
+        run: ctest --test-dir build --output-on-failure
