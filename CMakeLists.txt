@@ -12,12 +12,18 @@ cmake_minimum_required(VERSION 3.20)
 project(vix_orm VERSION 1.3.0 LANGUAGES CXX)
 
 include(GNUInstallDirs)
+include(FetchContent)
 
 # ------------------------------------------------------------------------------
 # Options
 # ------------------------------------------------------------------------------
-option(VIX_ORM_BUILD_TESTS       "Build unit tests for Vix ORM"               OFF)
-option(VIX_ORM_BUILD_EXAMPLES    "Build examples for Vix ORM"                OFF)
+option(VIX_ORM_BUILD_TESTS "Build unit tests for Vix ORM" OFF)
+option(VIX_ORM_BUILD_EXAMPLES "Build examples for Vix ORM" OFF)
+
+# Standalone support:
+# - Monorepo layout (vix/modules/orm): uses ../core and ../db
+# - Standalone repo (orm only): fetches Vix (core+db) with FetchContent
+option(VIX_ORM_FETCH_VIX_DEPS "Fetch vix core/db when building standalone" ON)
 
 # language / PIC
 set(CMAKE_CXX_STANDARD 20)
@@ -54,12 +60,50 @@ set(VIX_ORM_SOURCES
 # ------------------------------------------------------------------------------
 # Bring required modules when building standalone
 # ------------------------------------------------------------------------------
-if (NOT TARGET vix::core)
-  add_subdirectory(../core core_build)
+set(_VIX_ORM_HAS_MONOREPO_DEPS OFF)
+if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../core/CMakeLists.txt" AND
+    EXISTS "${CMAKE_CURRENT_LIST_DIR}/../db/CMakeLists.txt")
+  set(_VIX_ORM_HAS_MONOREPO_DEPS ON)
 endif()
 
-if (NOT TARGET vix::db)
-  add_subdirectory(../db db_build)
+# If core/db targets are missing, try to provide them via:
+# 1) monorepo add_subdirectory(../core, ../db)
+# 2) FetchContent vix + add_subdirectory(modules/core, modules/db)
+if (NOT TARGET vix::core OR NOT TARGET vix::db)
+  if (_VIX_ORM_HAS_MONOREPO_DEPS)
+    if (NOT TARGET vix::core)
+      add_subdirectory(../core core_build)
+    endif()
+
+    if (NOT TARGET vix::db)
+      add_subdirectory(../db db_build)
+    endif()
+  else()
+    if (VIX_ORM_FETCH_VIX_DEPS)
+      # NOTE: pin this to a tag or commit for reproducible builds if desired.
+      FetchContent_Declare(vix
+        GIT_REPOSITORY https://github.com/vixcpp/vix.git
+        GIT_TAG main
+      )
+      FetchContent_MakeAvailable(vix)
+
+      # Some upstream layouts may not add module targets automatically.
+      if (NOT TARGET vix::core AND EXISTS "${vix_SOURCE_DIR}/modules/core/CMakeLists.txt")
+        add_subdirectory("${vix_SOURCE_DIR}/modules/core" vix_core_build)
+      endif()
+
+      if (NOT TARGET vix::db AND EXISTS "${vix_SOURCE_DIR}/modules/db/CMakeLists.txt")
+        add_subdirectory("${vix_SOURCE_DIR}/modules/db" vix_db_build)
+      endif()
+    endif()
+  endif()
+endif()
+
+if (NOT TARGET vix::core OR NOT TARGET vix::db)
+  message(FATAL_ERROR
+    "vix_orm requires vix::core and vix::db.\n"
+    "Build in the vix monorepo (vix/modules/orm) so ../core and ../db exist,\n"
+    "or enable VIX_ORM_FETCH_VIX_DEPS=ON to fetch dependencies.")
 endif()
 
 # ------------------------------------------------------------------------------
@@ -124,6 +168,8 @@ if (VIX_ORM_BUILD_EXAMPLES)
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/querybuilder_update.cpp)
   vix_add_orm_example(tx_unit_of_work
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
+  vix_add_orm_example(tx_unit_of_work
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
   vix_add_orm_example(error_handling
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/error_handling.cpp)
 endif()
@@ -156,4 +202,13 @@ install(DIRECTORY include/
 message(STATUS "------------------------------------------------------")
 message(STATUS "[vix_orm] configured (${PROJECT_VERSION})")
 message(STATUS "[vix_orm] depends on: vix::db (drivers) + vix::core (base)")
+if (_VIX_ORM_HAS_MONOREPO_DEPS)
+  message(STATUS "[vix_orm] deps mode : monorepo (../core, ../db)")
+else()
+  if (VIX_ORM_FETCH_VIX_DEPS)
+    message(STATUS "[vix_orm] deps mode : standalone (FetchContent vix)")
+  else()
+    message(STATUS "[vix_orm] deps mode : standalone (no fetch)")
+  endif()
+endif()
 message(STATUS "------------------------------------------------------")

@@ -36,10 +36,22 @@ jobs:
 
           sudo apt-get install -y libspdlog-dev libmysqlcppconn-dev
 
+      - name: Cache CMake/FetchContent
+        uses: actions/cache@v4
+        with:
+          path: |
+            build
+            ~/.cache/cmake
+            ~/.cache/CMake
+          key: ${{ runner.os }}-${{ matrix.compiler }}-cmake-${{ hashFiles('CMakeLists.txt') }}
+          restore-keys: |
+            ${{ runner.os }}-${{ matrix.compiler }}-cmake-
+
       - name: Configure (Release)
         run: |
           cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
+            -DVIX_ORM_FETCH_VIX_DEPS=ON \
             -DVIX_ORM_BUILD_EXAMPLES=ON \
             -DVIX_ORM_BUILD_TESTS=ON
 
