@@ -22,7 +22,7 @@ option(VIX_ORM_BUILD_EXAMPLES "Build examples for Vix ORM" OFF)
 
 # Standalone support:
 # - Monorepo layout (vix/modules/orm): uses ../core and ../db
-# - Standalone repo (orm only): fetches Vix (core+db) with FetchContent
+# - Standalone repo (orm only): fetches Vix source tree, but adds ONLY core/db
 option(VIX_ORM_FETCH_VIX_DEPS "Fetch vix core/db when building standalone" ON)
 
 # language / PIC
@@ -58,7 +58,7 @@ set(VIX_ORM_SOURCES
 )
 
 # ------------------------------------------------------------------------------
-# Bring required modules when building standalone
+# Bring required modules (core/db)
 # ------------------------------------------------------------------------------
 set(_VIX_ORM_HAS_MONOREPO_DEPS OFF)
 if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../core/CMakeLists.txt" AND
@@ -66,11 +66,9 @@ if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../core/CMakeLists.txt" AND
   set(_VIX_ORM_HAS_MONOREPO_DEPS ON)
 endif()
 
-# If core/db targets are missing, try to provide them via:
-# 1) monorepo add_subdirectory(../core, ../db)
-# 2) FetchContent vix + add_subdirectory(modules/core, modules/db)
 if (NOT TARGET vix::core OR NOT TARGET vix::db)
   if (_VIX_ORM_HAS_MONOREPO_DEPS)
+    # monorepo: vix/modules/orm
     if (NOT TARGET vix::core)
       add_subdirectory(../core core_build)
     endif()
@@ -79,21 +77,25 @@ if (NOT TARGET vix::core OR NOT TARGET vix::db)
       add_subdirectory(../db db_build)
     endif()
   else()
+    # standalone: fetch vix source tree, but DO NOT configure umbrella
     if (VIX_ORM_FETCH_VIX_DEPS)
-      # NOTE: pin this to a tag or commit for reproducible builds if desired.
-      FetchContent_Declare(vix
+      FetchContent_Declare(vix_src
         GIT_REPOSITORY https://github.com/vixcpp/vix.git
         GIT_TAG main
       )
-      FetchContent_MakeAvailable(vix)
 
-      # Some upstream layouts may not add module targets automatically.
-      if (NOT TARGET vix::core AND EXISTS "${vix_SOURCE_DIR}/modules/core/CMakeLists.txt")
-        add_subdirectory("${vix_SOURCE_DIR}/modules/core" vix_core_build)
+      FetchContent_GetProperties(vix_src)
+      if (NOT vix_src_POPULATED)
+        FetchContent_Populate(vix_src)
       endif()
 
-      if (NOT TARGET vix::db AND EXISTS "${vix_SOURCE_DIR}/modules/db/CMakeLists.txt")
-        add_subdirectory("${vix_SOURCE_DIR}/modules/db" vix_db_build)
+      # Add only the needed modules to avoid target name collisions.
+      if (NOT TARGET vix::core)
+        add_subdirectory("${vix_src_SOURCE_DIR}/modules/core" vix_core_build)
+      endif()
+
+      if (NOT TARGET vix::db)
+        add_subdirectory("${vix_src_SOURCE_DIR}/modules/db" vix_db_build)
       endif()
     endif()
   endif()
@@ -103,7 +105,7 @@ if (NOT TARGET vix::core OR NOT TARGET vix::db)
   message(FATAL_ERROR
     "vix_orm requires vix::core and vix::db.\n"
     "Build in the vix monorepo (vix/modules/orm) so ../core and ../db exist,\n"
-    "or enable VIX_ORM_FETCH_VIX_DEPS=ON to fetch dependencies.")
+    "or enable VIX_ORM_FETCH_VIX_DEPS=ON to fetch core/db sources.")
 endif()
 
 # ------------------------------------------------------------------------------
@@ -168,8 +170,6 @@ if (VIX_ORM_BUILD_EXAMPLES)
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/querybuilder_update.cpp)
   vix_add_orm_example(tx_unit_of_work
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
-  vix_add_orm_example(tx_unit_of_work
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
   vix_add_orm_example(error_handling
     ${CMAKE_CURRENT_SOURCE_DIR}/examples/error_handling.cpp)
 endif()
@@ -206,7 +206,7 @@ if (_VIX_ORM_HAS_MONOREPO_DEPS)
   message(STATUS "[vix_orm] deps mode : monorepo (../core, ../db)")
 else()
   if (VIX_ORM_FETCH_VIX_DEPS)
-    message(STATUS "[vix_orm] deps mode : standalone (FetchContent vix)")
+    message(STATUS "[vix_orm] deps mode : standalone (FetchContent core/db only)")
   else()
     message(STATUS "[vix_orm] deps mode : standalone (no fetch)")
   endif()
