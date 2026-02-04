@@ -19,12 +19,11 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Install build tools + deps
+      - name: Install tools + deps
         run: |
           sudo apt-get update
           sudo apt-get install -y cmake ninja-build
 
-          # compilers
           if [ "${{ matrix.compiler }}" = "gcc" ]; then
             sudo apt-get install -y gcc-12 g++-12
             echo "CC=gcc-12" >> $GITHUB_ENV
@@ -35,12 +34,11 @@ jobs:
             echo "CXX=clang++" >> $GITHUB_ENV
           fi
 
-          # optional deps used by orm/db
           sudo apt-get install -y libspdlog-dev libmysqlcppconn-dev
 
-      - name: Configure (Release, ORM standalone)
+      - name: Configure (Release)
         run: |
-          cmake -S modules/orm -B build -G Ninja \
+          cmake -S . -B build -G Ninja \
             -DCMAKE_BUILD_TYPE=Release \
             -DVIX_ORM_BUILD_EXAMPLES=ON \
             -DVIX_ORM_BUILD_TESTS=ON
