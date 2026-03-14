@@ -1,0 +1,27 @@
+{
+  "name": "orm",
+  "namespace": "vix",
+  "version": "0.1.0",
+  "type": "header-and-source",
+  "include": "include",
+  "src": "src",
+  "license": "MIT",
+  "description": "Lightweight C++ ORM utilities for Vix.cpp: Entity mapping, repositories, query builder, and unit-of-work pattern.",
+  "keywords": [
+    "cpp",
+    "vix",
+    "orm",
+    "repository",
+    "unit-of-work",
+    "query-builder",
+    "entity",
+    "database"
+  ],
+  "repository": "https://github.com/vixcpp/orm",
+  "authors": [
+    {
+      "name": "Gaspard Kirira",
+      "github": "Gaspardkirira"
+    }
+  ]
+}
