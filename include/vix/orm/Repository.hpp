@@ -21,6 +21,7 @@
 #include <cstddef>
 #include <cstdint>
 #include <optional>
+#include <stdexcept>
 #include <string>
 #include <utility>
 #include <vector>
@@ -30,16 +31,19 @@ namespace vix::orm
   /**
    * @brief Generic repository for ORM entities.
    *
-   * BaseRepository<T> provides a minimal CRUD interface for an
-   * ORM entity mapped to a single database table.
+   * BaseRepository<T> provides a small, explicit, and predictable CRUD API
+   * for a single entity type mapped to a single database table.
    *
    * Assumptions:
-   * - The underlying table uses a primary key column named "id"
-   * - The Mapper<T> specialization defines how the entity is
-   *   serialized/deserialized
+   * - the table has a primary key column named "id"
+   * - Mapper<T> is specialized by the user
+   * - SQL stays explicit and deterministic
    *
-   * This class intentionally avoids complex query abstraction
-   * and focuses on predictable, explicit SQL.
+   * Design goals:
+   * - no hidden queries
+   * - no reflection
+   * - no implicit dirty tracking
+   * - no runtime magic
    */
   template <class T>
   class BaseRepository
@@ -47,49 +51,76 @@ namespace vix::orm
     vix::db::ConnectionPool &pool_;
     std::string table_;
 
-    static std::string
-    build_insert_cols(const std::vector<std::pair<std::string, std::any>> &params)
+    static void ensureNotEmpty(const FieldValues &fields,
+                               const char *context)
+    {
+      if (fields.empty())
+      {
+        throw std::runtime_error(std::string("BaseRepository: empty field list in ") + context);
+      }
+    }
+
+    static std::string buildInsertColumns(const FieldValues &fields)
     {
       std::string cols;
       cols.reserve(64);
 
-      for (std::size_t i = 0; i < params.size(); ++i)
+      for (std::size_t i = 0; i < fields.size(); ++i)
       {
-        cols += params[i].first;
-        if (i + 1 < params.size())
+        cols += fields[i].first;
+        if (i + 1 < fields.size())
+        {
           cols += ",";
+        }
       }
+
       return cols;
     }
 
-    static std::string build_insert_qs(std::size_t n)
+    static std::string buildInsertPlaceholders(std::size_t n)
     {
-      std::string qs;
-      qs.reserve(32);
+      std::string placeholders;
+      placeholders.reserve(32);
 
       for (std::size_t i = 0; i < n; ++i)
       {
-        qs += "?";
+        placeholders += "?";
         if (i + 1 < n)
-          qs += ",";
+        {
+          placeholders += ",";
+        }
       }
-      return qs;
+
+      return placeholders;
     }
 
-    static std::string
-    build_update_set(const std::vector<std::pair<std::string, std::any>> &params)
+    static std::string buildUpdateSetClause(const FieldValues &fields)
     {
-      std::string set;
-      set.reserve(128);
+      std::string setClause;
+      setClause.reserve(128);
 
-      for (std::size_t i = 0; i < params.size(); ++i)
+      for (std::size_t i = 0; i < fields.size(); ++i)
       {
-        set += params[i].first;
-        set += "=?";
-        if (i + 1 < params.size())
-          set += ",";
+        setClause += fields[i].first;
+        setClause += "=?";
+        if (i + 1 < fields.size())
+        {
+          setClause += ",";
+        }
       }
-      return set;
+
+      return setClause;
+    }
+
+    static void bindFields(vix::db::Statement &st,
+                           const FieldValues &fields,
+                           std::size_t startIndex = 1)
+    {
+      std::size_t index = startIndex;
+      for (const auto &field : fields)
+      {
+        st.bind(index++, any_to_dbvalue_or_throw(field.second));
+      }
     }
 
   public:
@@ -100,97 +131,215 @@ namespace vix::orm
      * @param table Database table name.
      */
     BaseRepository(vix::db::ConnectionPool &pool, std::string table)
-        : pool_(pool), table_(std::move(table)) {}
+        : pool_(pool), table_(std::move(table))
+    {
+      if (table_.empty())
+      {
+        throw std::runtime_error("BaseRepository: table name cannot be empty");
+      }
+    }
+
+    /**
+     * @brief Return the database table name used by this repository.
+     *
+     * @return Table name.
+     */
+    const std::string &table() const noexcept
+    {
+      return table_;
+    }
+
+    /**
+     * @brief Access the underlying connection pool.
+     *
+     * @return Connection pool reference.
+     */
+    vix::db::ConnectionPool &pool() noexcept
+    {
+      return pool_;
+    }
+
+    /**
+     * @brief Access the underlying connection pool (const).
+     *
+     * @return Connection pool reference.
+     */
+    const vix::db::ConnectionPool &pool() const noexcept
+    {
+      return pool_;
+    }
 
     /**
      * @brief Insert a new entity.
      *
-     * Uses Mapper<T>::toInsertParams to build the INSERT statement.
+     * Uses Mapper<T>::toInsertFields to generate the INSERT statement.
      *
-     * @param v Entity instance.
-     * @return Generated primary key (last insert id).
+     * @param value Entity instance.
+     * @return Generated primary key.
      */
-    std::uint64_t create(const T &v)
+    std::uint64_t create(const T &value)
     {
-      const auto params = Mapper<T>::toInsertParams(v);
+      const auto fields = Mapper<T>::toInsertFields(value);
+      ensureNotEmpty(fields, "create");
 
-      const std::string cols = build_insert_cols(params);
-      const std::string qs = build_insert_qs(params.size());
+      const std::string columns = buildInsertColumns(fields);
+      const std::string placeholders = buildInsertPlaceholders(fields.size());
 
       const std::string sql =
-          "INSERT INTO " + table_ + " (" + cols + ") VALUES (" + qs + ")";
+          "INSERT INTO " + table_ + " (" + columns + ") VALUES (" + placeholders + ")";
 
-      vix::db::PooledConn pc(pool_);
-      auto st = pc.get().prepare(sql);
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
 
-      for (std::size_t i = 0; i < params.size(); ++i)
-        st->bind(i + 1, any_to_dbvalue_or_throw(params[i].second));
-
+      bindFields(*st, fields);
       st->exec();
-      return pc.get().lastInsertId();
+
+      return conn.get().lastInsertId();
     }
 
     /**
-     * @brief Find an entity by its primary key.
+     * @brief Find an entity by primary key.
      *
      * @param id Primary key value.
-     * @return Entity instance if found, otherwise std::nullopt.
+     * @return Entity if found, otherwise std::nullopt.
      */
     std::optional<T> findById(std::int64_t id)
     {
       const std::string sql =
           "SELECT * FROM " + table_ + " WHERE id = ? LIMIT 1";
 
-      vix::db::PooledConn pc(pool_);
-      auto st = pc.get().prepare(sql);
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
       st->bind(1, id);
 
       auto rs = st->query();
       if (!rs || !rs->next())
+      {
         return std::nullopt;
+      }
 
       return Mapper<T>::fromRow(rs->row());
     }
 
     /**
-     * @brief Update an entity by its primary key.
+     * @brief Return all rows from the table.
      *
-     * Uses Mapper<T>::toUpdateParams to generate column assignments.
+     * @return Vector of materialized entities.
+     */
+    std::vector<T> findAll()
+    {
+      const std::string sql = "SELECT * FROM " + table_;
+
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
+      auto rs = st->query();
+
+      std::vector<T> out;
+      while (rs && rs->next())
+      {
+        out.push_back(Mapper<T>::fromRow(rs->row()));
+      }
+
+      return out;
+    }
+
+    /**
+     * @brief Check whether an entity exists for a given primary key.
      *
      * @param id Primary key value.
-     * @param v  Entity instance.
+     * @return true if a row exists, false otherwise.
+     */
+    bool existsById(std::int64_t id)
+    {
+      const std::string sql =
+          "SELECT id FROM " + table_ + " WHERE id = ? LIMIT 1";
+
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
+      st->bind(1, id);
+
+      auto rs = st->query();
+      return rs && rs->next();
+    }
+
+    /**
+     * @brief Count all rows in the table.
+     *
+     * @return Total number of rows.
+     */
+    std::uint64_t count()
+    {
+      const std::string sql = "SELECT COUNT(*) FROM " + table_;
+
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
+      auto rs = st->query();
+
+      if (!rs || !rs->next())
+      {
+        return 0;
+      }
+
+      return static_cast<std::uint64_t>(rs->row().getInt64(0));
+    }
+
+    /**
+     * @brief Update an entity by primary key.
+     *
+     * Uses Mapper<T>::toUpdateFields to generate the SET clause.
+     *
+     * @param id    Primary key value.
+     * @param value Entity instance.
      * @return Number of affected rows.
      */
-    std::uint64_t updateById(std::int64_t id, const T &v)
+    std::uint64_t updateById(std::int64_t id, const T &value)
     {
-      const auto params = Mapper<T>::toUpdateParams(v);
+      const auto fields = Mapper<T>::toUpdateFields(value);
+      ensureNotEmpty(fields, "updateById");
 
-      const std::string set = build_update_set(params);
+      const std::string setClause = buildUpdateSetClause(fields);
       const std::string sql =
-          "UPDATE " + table_ + " SET " + set + " WHERE id=?";
+          "UPDATE " + table_ + " SET " + setClause + " WHERE id=?";
 
-      vix::db::PooledConn pc(pool_);
-      auto st = pc.get().prepare(sql);
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
 
-      std::size_t idx = 1;
-      for (const auto &kv : params)
-        st->bind(idx++, any_to_dbvalue_or_throw(kv.second));
+      bindFields(*st, fields);
+      st->bind(fields.size() + 1, id);
 
-      st->bind(idx, id);
       return st->exec();
     }
 
     /**
-     * @brief Delete an entity by its primary key.
+     * @brief Delete an entity by primary key.
      *
      * @param id Primary key value.
      * @return Number of affected rows.
      */
     std::uint64_t removeById(std::int64_t id)
     {
-      vix::db::PooledConn pc(pool_);
-      auto st = pc.get().prepare("DELETE FROM " + table_ + " WHERE id = ?");
+      const std::string sql =
+          "DELETE FROM " + table_ + " WHERE id = ?";
+
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
       st->bind(1, id);
+
+      return st->exec();
+    }
+
+    /**
+     * @brief Delete all rows from the table.
+     *
+     * @return Number of affected rows.
+     */
+    std::uint64_t removeAll()
+    {
+      const std::string sql = "DELETE FROM " + table_;
+
+      vix::db::PooledConn conn(pool_);
+      auto st = conn.get().prepare(sql);
+
       return st->exec();
     }
   };

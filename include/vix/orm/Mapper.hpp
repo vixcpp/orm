@@ -17,6 +17,7 @@
 
 #include <any>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -25,15 +26,32 @@
 namespace vix::orm
 {
   /**
+   * @brief Represents a single column/value pair used by ORM mappers.
+   *
+   * This type is used internally by repositories to build INSERT and
+   * UPDATE statements from user-defined entities.
+   *
+   * Values are stored as std::any at the mapper boundary to keep the
+   * specialization interface flexible and independent from low-level
+   * database driver details.
+   */
+  using FieldValue = std::pair<std::string, std::any>;
+
+  /**
+   * @brief Represents a list of ORM field/value pairs.
+   */
+  using FieldValues = std::vector<FieldValue>;
+
+  /**
    * @brief User-specialized mapper for ORM entities.
    *
-   * Mapper<T> defines how an ORM entity of type @p T is:
-   * - constructed from a database result row
-   * - converted into parameters for INSERT statements
-   * - converted into parameters for UPDATE statements
+   * Mapper<T> defines how an entity of type @p T is:
+   * - materialized from a database row
+   * - converted into fields for INSERT statements
+   * - converted into fields for UPDATE statements
    *
-   * This template is intended to be fully specialized by the user
-   * for each entity type.
+   * This template is intended to be fully specialized by the user for
+   * each entity type.
    *
    * Example:
    * @code
@@ -42,22 +60,29 @@ namespace vix::orm
    * {
    *   static User fromRow(const vix::db::ResultRow &row);
    *
-   *   static std::vector<std::pair<std::string, std::any>>
-   *   toInsertParams(const User &u);
+   *   static vix::orm::FieldValues toInsertFields(const User &u);
    *
-   *   static std::vector<std::pair<std::string, std::any>>
-   *   toUpdateParams(const User &u);
+   *   static vix::orm::FieldValues toUpdateFields(const User &u);
    * };
    * @endcode
+   *
+   * Design goals:
+   * - explicit mapping
+   * - no reflection
+   * - no hidden metadata
+   * - no runtime magic
    */
   template <class T>
   struct Mapper
   {
+    static_assert(!std::is_reference_v<T>,
+                  "Mapper<T> cannot be specialized for reference types");
+
     /**
      * @brief Construct an entity instance from a database row.
      *
-     * This method is called when materializing query results
-     * into ORM entities.
+     * This method is used when materializing query results into
+     * user-defined entity objects.
      *
      * @param row Database result row.
      * @return Constructed entity instance.
@@ -65,30 +90,56 @@ namespace vix::orm
     static T fromRow(const vix::db::ResultRow &row);
 
     /**
-     * @brief Produce parameters for an INSERT statement.
+     * @brief Produce field/value pairs for an INSERT statement.
      *
-     * Returns a list of column/value pairs representing the
-     * fields to be inserted. Values are stored as std::any
-     * and later converted to DbValue by the ORM.
+     * The returned fields define which columns are inserted and which
+     * values are bound for the operation.
      *
-     * @param v Entity instance.
-     * @return List of column/value pairs.
+     * @param value Entity instance.
+     * @return Field/value pairs for insertion.
      */
-    static std::vector<std::pair<std::string, std::any>>
-    toInsertParams(const T &v);
+    static FieldValues toInsertFields(const T &value);
 
     /**
-     * @brief Produce parameters for an UPDATE statement.
+     * @brief Produce field/value pairs for an UPDATE statement.
      *
-     * Returns a list of column/value pairs representing the
-     * fields to be updated. Typically excludes immutable
-     * fields such as primary keys.
+     * The returned fields define which columns are updated and which
+     * values are bound for the operation.
      *
-     * @param v Entity instance.
-     * @return List of column/value pairs.
+     * Primary keys and immutable fields are typically excluded.
+     *
+     * @param value Entity instance.
+     * @return Field/value pairs for update.
      */
-    static std::vector<std::pair<std::string, std::any>>
-    toUpdateParams(const T &v);
+    static FieldValues toUpdateFields(const T &value);
+
+    /**
+     * @brief Backward-compatible alias for older mapper implementations.
+     *
+     * Existing code using toInsertParams can continue to compile while
+     * the ORM migrates toward the clearer field-based naming.
+     *
+     * @param value Entity instance.
+     * @return Field/value pairs for insertion.
+     */
+    static FieldValues toInsertParams(const T &value)
+    {
+      return toInsertFields(value);
+    }
+
+    /**
+     * @brief Backward-compatible alias for older mapper implementations.
+     *
+     * Existing code using toUpdateParams can continue to compile while
+     * the ORM migrates toward the clearer field-based naming.
+     *
+     * @param value Entity instance.
+     * @return Field/value pairs for update.
+     */
+    static FieldValues toUpdateParams(const T &value)
+    {
+      return toUpdateFields(value);
+    }
   };
 
 } // namespace vix::orm

@@ -1,7 +1,7 @@
 {
   "name": "orm",
   "namespace": "vix",
-  "version": "0.1.0",
+  "version": "1.9.0",
   "type": "header-and-source",
   "include": "include",
   "src": "src",

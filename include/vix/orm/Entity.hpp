@@ -16,23 +16,51 @@
 #define VIX_ENTITY_HPP
 
 #include <cstdint>
-#include <string>
 
 namespace vix::orm
 {
   /**
    * @brief Base class for ORM entities.
    *
-   * Entity is the common base type for all ORM-managed objects.
-   * It provides a polymorphic interface and a virtual destructor,
-   * allowing entities to be handled via base pointers or references.
+   * Entity represents a domain object managed by the ORM.
    *
-   * This type intentionally contains no data or behavior and serves
-   * purely as a semantic marker and extension point for the ORM.
+   * Design principles:
+   * - No hidden behavior
+   * - No automatic persistence
+   * - No runtime reflection
+   * - Explicit control by the developer
+   *
+   * This class provides a minimal identity model used internally
+   * by repositories and UnitOfWork without imposing any constraints
+   * on user-defined types.
+   *
+   * Users are free to ignore inheritance entirely, but extending
+   * Entity enables advanced ORM features such as tracking and identity.
    */
   struct Entity
   {
+    /**
+     * @brief Virtual destructor for polymorphic usage.
+     */
     virtual ~Entity() = default;
+
+    /**
+     * @brief Return the entity identifier.
+     *
+     * This method is optional and may be overridden by derived types.
+     *
+     * @return Identifier value.
+     */
+    virtual std::int64_t id() const noexcept { return 0; }
+
+    /**
+     * @brief Set the entity identifier.
+     *
+     * This method is optional and may be overridden by derived types.
+     *
+     * @param value Identifier value.
+     */
+    virtual void setId(std::int64_t) noexcept {}
   };
 
 } // namespace vix::orm

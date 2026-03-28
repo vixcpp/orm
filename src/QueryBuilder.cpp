@@ -3,8 +3,10 @@
  *  @file QueryBuilder.cpp
  *  @author Gaspard Kirira
  *
- *  Copyright 2025, Gaspard Kirira.  All rights reserved.
+ *  Copyright 2025, Gaspard Kirira.
+ *  All rights reserved.
  *  https://github.com/vixcpp/vix
+ *
  *  Use of this source code is governed by a MIT license
  *  that can be found in the License file.
  *
@@ -12,43 +14,44 @@
  */
 #include <vix/orm/QueryBuilder.hpp>
 
-#include <sstream>
-#include <utility>
-#include <vector>
+#include <string>
 
 namespace vix::orm::qb_internal
 {
-  inline std::string join_placeholders(std::size_t n)
+  /**
+   * @brief Build a comma-separated placeholder list.
+   *
+   * Example:
+   * - n = 0 -> ""
+   * - n = 1 -> "?"
+   * - n = 3 -> "?, ?, ?"
+   *
+   * This helper is intended for internal ORM query generation.
+   *
+   * @param n Number of placeholders to generate.
+   * @return Placeholder list string.
+   */
+  std::string join_placeholders(std::size_t n)
   {
     if (n == 0)
+    {
       return {};
-    std::string s;
-    s.reserve(n * 3);
+    }
+
+    std::string out;
+    out.reserve(n * 3);
+
     for (std::size_t i = 0; i < n; ++i)
     {
-      s.push_back('?');
+      out.push_back('?');
       if (i + 1 < n)
       {
-        s.push_back(',');
-        s.push_back(' ');
+        out.push_back(',');
+        out.push_back(' ');
       }
     }
-    return s;
-  }
 
-  template <class Range>
-  inline QueryBuilder &append_in_list(QueryBuilder &qb, const Range &values)
-  {
-    using std::begin;
-    using std::end;
-    const auto n = static_cast<std::size_t>(std::distance(begin(values), end(values)));
-
-    qb.raw("IN (").raw(join_placeholders(n)).raw(")");
-
-    for (const auto &v : values)
-      qb.param(v);
-
-    return qb;
+    return out;
   }
 
 } // namespace vix::orm::qb_internal

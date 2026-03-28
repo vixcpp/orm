@@ -15,6 +15,8 @@
 #ifndef VIX_UNIT_OF_WORK_HPP
 #define VIX_UNIT_OF_WORK_HPP
 
+#include <utility>
+
 #include <vix/orm/db_compat.hpp>
 
 namespace vix::orm
@@ -22,68 +24,166 @@ namespace vix::orm
   /**
    * @brief Transactional unit of work.
    *
-   * UnitOfWork groups multiple repository or direct SQL operations
-   * into a single transactional scope.
+   * UnitOfWork groups multiple ORM or direct SQL operations into a
+   * single transactional scope.
    *
-   * A database transaction is started on construction and is
-   * automatically rolled back on destruction unless explicitly
-   * committed.
+   * A transaction is started on construction and is automatically
+   * rolled back on destruction unless explicitly committed or rolled back.
    *
-   * This class follows RAII semantics and is intended to be used
-   * as a short-lived scope object.
+   * Design goals:
+   * - explicit transaction boundaries
+   * - RAII safety
+   * - no hidden persistence
+   * - simple integration with repositories
    */
   class UnitOfWork
   {
+    vix::db::ConnectionPool *pool_ = nullptr;
     vix::db::Transaction tx_;
+    bool active_ = true;
 
   public:
     /**
-     * @brief Begin a new unit of work.
-     *
-     * Acquires a connection from the pool and starts a transaction.
+     * @brief Begin a new unit of work from a connection pool.
      *
      * @param pool Connection pool.
      */
     explicit UnitOfWork(vix::db::ConnectionPool &pool)
-        : tx_(pool) {}
+        : pool_(&pool), tx_(pool)
+    {
+    }
+
+    /**
+     * @brief Begin a new unit of work from a Database facade.
+     *
+     * @param db Database facade.
+     */
+    explicit UnitOfWork(vix::db::Database &db)
+        : UnitOfWork(db.pool())
+    {
+    }
+
+    ~UnitOfWork() = default;
 
     UnitOfWork(const UnitOfWork &) = delete;
     UnitOfWork &operator=(const UnitOfWork &) = delete;
 
-    UnitOfWork(UnitOfWork &&) noexcept = default;
-    UnitOfWork &operator=(UnitOfWork &&) noexcept = default;
+    UnitOfWork(UnitOfWork &&other) noexcept
+        : pool_(other.pool_), tx_(std::move(other.tx_)), active_(other.active_)
+    {
+      other.pool_ = nullptr;
+      other.active_ = false;
+    }
+
+    UnitOfWork &operator=(UnitOfWork &&) = delete;
+
+    /**
+     * @brief Return whether the unit of work is still active.
+     *
+     * A unit of work becomes inactive after commit() or rollback().
+     *
+     * @return true if active, false otherwise.
+     */
+    [[nodiscard]] bool active() const noexcept
+    {
+      return active_;
+    }
 
     /**
      * @brief Commit the transaction.
      *
-     * After calling commit(), the UnitOfWork becomes inactive
-     * and will not perform a rollback on destruction.
+     * After commit, the unit of work becomes inactive.
      */
-    void commit() { tx_.commit(); }
+    void commit()
+    {
+      if (!active_)
+      {
+        return;
+      }
+
+      tx_.commit();
+      active_ = false;
+    }
 
     /**
      * @brief Roll back the transaction explicitly.
      *
-     * After calling rollback(), the UnitOfWork becomes inactive.
+     * After rollback, the unit of work becomes inactive.
      */
-    void rollback() { tx_.rollback(); }
+    void rollback()
+    {
+      if (!active_)
+      {
+        return;
+      }
+
+      tx_.rollback();
+      active_ = false;
+    }
 
     /**
      * @brief Access the underlying database connection.
      *
-     * Intended for repositories or low-level queries that need
-     * to participate in the same transaction.
+     * This allows repositories and explicit SQL statements to run in
+     * the same transactional scope.
      *
-     * @return Reference to an active database connection.
+     * @return Active database connection.
      */
-    vix::db::Connection &conn() { return tx_.conn(); }
+    vix::db::Connection &conn()
+    {
+      return tx_.conn();
+    }
 
     /**
      * @brief Const access to the underlying database connection.
+     *
+     * @return Active database connection.
      */
     const vix::db::Connection &conn() const
     {
       return const_cast<UnitOfWork *>(this)->tx_.conn();
+    }
+
+    /**
+     * @brief Access the connection pool used by this unit of work.
+     *
+     * @return Connection pool reference.
+     */
+    vix::db::ConnectionPool &pool()
+    {
+      return *pool_;
+    }
+
+    /**
+     * @brief Const access to the connection pool used by this unit of work.
+     *
+     * @return Connection pool reference.
+     */
+    const vix::db::ConnectionPool &pool() const
+    {
+      return *pool_;
+    }
+
+    /**
+     * @brief Access the underlying transaction object.
+     *
+     * This is intended for advanced internal integration scenarios.
+     *
+     * @return Transaction reference.
+     */
+    vix::db::Transaction &transaction()
+    {
+      return tx_;
+    }
+
+    /**
+     * @brief Const access to the underlying transaction object.
+     *
+     * @return Transaction reference.
+     */
+    const vix::db::Transaction &transaction() const
+    {
+      return tx_;
     }
   };
 

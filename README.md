@@ -2,7 +2,7 @@
 
 <p align="center">
   <strong>A thin, explicit ORM layer for modern C++</strong><br/>
-  No magic · No hidden queries · No performance tax
+  Structure your data access without losing control
 </p>
 
 <p align="center">
@@ -15,119 +15,258 @@
 
 ## What is Vix ORM?
 
-**Vix ORM** is the optional object-mapping layer of **Vix.cpp**.
+**Vix ORM** is a lightweight object-mapping layer built on top of **Vix DB**.
 
-It provides a **lightweight, intentional abstraction** on top of **Vix DB**
-for developers who want:
+It gives you just enough structure to:
+- organize your domain models
+- centralize database access
+- write safer, clearer code
 
-- cleaner domain models
-- structured repositories
-- safer data access patterns
+Without:
+- hiding SQL
+- introducing runtime magic
+- sacrificing performance
 
-…without giving up **control, predictability, or performance**.
-
-Vix ORM is not designed to hide the database.
-It is designed to **organize your code**, not obscure what happens underneath.
+> It is not here to replace SQL.
+> It is here to make your code easier to reason about.
 
 ---
 
-## Why another ORM?
+## Core idea
 
-Most ORMs today:
+Most ORMs try to replace the database.
 
-- try to abstract SQL completely
-- generate complex, unpredictable queries
-- hide transactions and connections
-- make performance issues hard to diagnose
+Vix ORM does the opposite.
 
-Vix ORM takes a different path.
-
-> **SQL is still there.
-> The database is still visible.
-> The cost model stays explicit.**
+> **The database stays visible.
+> The cost stays predictable.
+> The control stays in your hands.**
 
 You always know:
 - when a query runs
-- inside which transaction
-- on which connection
-- with which performance implications
+- which connection is used
+- which transaction is active
+- what the SQL actually does
+
+No surprises.
 
 ---
 
-## A “sugar layer”, not a framework
+## Why Vix ORM exists
 
-Vix ORM is intentionally **thin**.
+Traditional ORMs often introduce:
+- hidden queries
+- implicit transactions
+- unpredictable performance
+- hard-to-debug abstractions
 
-It focuses on:
-- mapping rows to objects
-- organizing queries in repositories
-- grouping operations with unit-of-work patterns
+Vix ORM removes all of that.
 
-It does **not**:
-- invent its own query language
-- auto-generate schemas
-- introduce runtime reflection
-- enforce a specific architecture
+It is built around one principle:
 
-You stay in control.
+> **Make data access explicit, not magical.**
+
+---
+
+## What Vix ORM provides
+
+Vix ORM focuses on a small set of primitives:
+
+### 1. Entity
+
+A minimal base for identity-aware objects.
+
+```cpp
+struct User : vix::orm::Entity
+{
+  std::int64_t userId{};
+  std::string name;
+
+  std::int64_t id() const noexcept override { return userId; }
+  void setId(std::int64_t v) noexcept override { userId = v; }
+};
+```
+
+### 2. Mapper
+
+Explicit mapping between database rows and objects.
+
+```cpp
+template <>
+struct vix::orm::Mapper<User>
+{
+  static User fromRow(const vix::db::ResultRow &row)
+  {
+    User u{};
+    u.setId(row.getInt64Or(0, 0));
+    u.name = row.getStringOr(1, "");
+    return u;
+  }
+
+  static vix::orm::FieldValues toInsertFields(const User &u)
+  {
+    return {{"name", u.name}};
+  }
+
+  static vix::orm::FieldValues toUpdateFields(const User &u)
+  {
+    return {{"name", u.name}};
+  }
+};
+```
+
+No reflection. No macros. Fully controlled.
+
+### 3. Repository
+
+A thin, explicit CRUD layer.
+
+```cpp
+auto repo = vix::orm::repository<User>(db, "users");
+
+User user{};
+user.name = "Alice";
+
+auto id = repo.create(user);
+auto result = repo.findById(static_cast<std::int64_t>(id));
+```
+
+### 4. Unit of Work
+
+Explicit transaction boundaries.
+
+```cpp
+auto uow = vix::orm::unit_of_work(db);
+
+// run multiple operations here
+
+uow.commit();
+```
+
+No implicit transactions. Ever.
+
+---
+
+## What Vix ORM does NOT do
+
+Vix ORM is intentionally limited.
+
+It does NOT:
+- generate schemas
+- hide SQL behind a DSL
+- perform lazy loading
+- track dirty state automatically
+- use runtime reflection
+
+If you need those features, this is not the right tool.
+
+---
+
+## Design philosophy
+
+Vix ORM is built around 5 rules:
+
+1. **No hidden queries**
+2. **No implicit transactions**
+3. **No runtime magic**
+4. **SQL stays first-class**
+5. **Performance is predictable**
+
+Everything else is optional.
 
 ---
 
 ## Built on top of Vix DB
 
-Vix ORM is powered by **Vix DB**, the low-level database layer of Vix.cpp.
+Vix ORM uses **Vix DB** as its foundation.
 
 That means:
-- explicit transactions
-- predictable pooling behavior
-- no hidden drivers
-- no duplicate database logic
+- explicit connection pooling
+- deterministic transaction handling
+- direct access to drivers like SQLite and MySQL
+- zero duplication of database logic
 
-If you ever outgrow the ORM,
-you can drop down to Vix DB **without rewriting your application**.
+If needed, you can drop to raw DB instantly:
 
----
+```cpp
+auto conn = db.pool().acquire();
+auto st = conn->prepare("SELECT * FROM users");
+auto rs = st->query();
+```
 
-## When should you use Vix ORM?
-
-Vix ORM is a good fit if you:
-
-- want structure without magic
-- prefer repositories over raw SQL everywhere
-- value performance and debuggability
-- build long-lived C++ systems
-- dislike “active record everywhere” patterns
-
-If you want full control, you can skip it.
-If you want light structure, it’s there.
+No lock-in.
 
 ---
 
-## Modern C++ by design
+## When to use Vix ORM
 
-Vix ORM is built with modern C++ principles:
+Use it if you want:
+- structure without abstraction overhead
+- explicit data access patterns
+- predictable performance
+- long-term maintainable C++ systems
 
+Do not use it if you want:
+- full automation
+- rapid prototyping with heavy abstraction
+- Rails-style magic
+
+---
+
+## Examples
+
+The module includes a full set of examples:
+
+```text
+examples/
+├── 01_basic_repository.cpp
+├── 02_repository_crud.cpp
+├── 03_find_all_and_count.cpp
+├── 04_exists_and_delete.cpp
+├── 05_unit_of_work.cpp
+├── 06_batch_insert_tx.cpp
+├── 07_query_builder_select.cpp
+├── 08_query_builder_update.cpp
+├── 09_error_handling.cpp
+├── 10_custom_repository.cpp
+├── 11_sqlite_repository.cpp
+├── 12_mysql_repository.cpp
+├── 13_migrations_code.cpp
+├── 14_migrations_files.cpp
+├── 15_entity_identity.cpp
+└── 16_manual_sql_with_orm.cpp
+```
+
+Build them:
+
+```bash
+vix build -- -DVIX_ORM_BUILD_EXAMPLES=ON
+```
+
+---
+
+## Modern C++ only
+
+Vix ORM is designed for modern systems:
 - C++20
+- RAII everywhere
 - explicit ownership
-- RAII for safety
-- compile-time clarity
-- minimal abstractions
+- no macros
+- no code generation
 
-No macros.
-No code generation.
-No runtime surprises.
+Everything is visible in the code.
 
 ---
 
-## Part of the Vix.cpp ecosystem
+## Part of Vix.cpp
 
-Vix ORM is an **optional module** of **Vix.cpp**.
+Vix ORM is an optional module of **Vix.cpp**.
 
-It integrates seamlessly with:
+It integrates with:
 - Vix Core
 - Vix DB
 - Vix CLI
-- WebSocket & network modules
+- networking modules
 
 Use only what you need.
 
@@ -135,21 +274,45 @@ Use only what you need.
 
 ## Getting started
 
-Vix ORM is built automatically when enabled through the Vix.cpp umbrella.
+Clone the main repository:
 
-For setup, examples, and usage, start from the main repository:
+```bash
+git clone https://github.com/vixcpp/vix.git
+cd vix/modules/orm
+```
 
-👉 https://github.com/vixcpp/vix
+Build the module:
+
+```bash
+vix build
+```
+
+Build with examples:
+
+```bash
+vix build -- -DVIX_ORM_BUILD_EXAMPLES=ON
+```
 
 ---
 
-## ⭐ Support the project
+## Philosophy in one sentence
 
-If you believe ORMs should be:
+> Structure your data access.
+> Keep your control.
+> Never hide the cost.
+
+---
+
+## Support
+
+If you believe backend tools should be:
 - explicit
 - predictable
 - performance-aware
 
-please consider starring **Vix.cpp**.
+consider starring the project.
+
+---
 
 MIT License
+

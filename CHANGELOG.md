@@ -1,94 +1,212 @@
 # Changelog
 
-All notable changes to this project will be documented in this file.
+All notable changes to **Vix ORM** are documented in this file.
 
-The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.0.0/)  
-and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
+This project follows a developer-first approach:
+- explicit changes
+- no hidden behavior
+- predictable evolution
+
+---
+
+## [1.9.0] - 2026-03-28
+
+### Highlights
+
+This release focuses on **clarity, correctness, and developer experience**.
+
+- Full rewrite of examples
+- API consistency improvements
+- Fixes for move semantics and const correctness
+- Cleaner positioning of ORM as a **pure explicit layer on top of Vix DB**
+
+---
+
+### Added
+
+- Complete structured examples suite (16 examples):
+
+  - basic repository usage
+  - full CRUD flows
+  - unit of work
+  - batch operations
+  - query builder usage
+  - error handling
+  - custom repositories
+  - SQLite / MySQL integration
+  - migrations (code + files)
+  - entity identity handling
+  - manual SQL integration
+
+- `examples/CMakeLists.txt`:
+  - automatic registration of examples
+  - unified build output
+  - migration files auto-copy
 
 ---
 
 ### Changed
 
--
+- **README.md**
+  - rewritten for clarity and positioning
+  - stronger “explicit ORM” philosophy
+  - real-world usage examples added
+
+- **ORM API stabilization**
+
+  - `Entity`
+    - clarified identity model
+
+  - `Mapper`
+    - standardized:
+      - `toInsertFields`
+      - `toUpdateFields`
+
+  - `Repository`
+    - improved SQL generation clarity
+    - stricter behavior on empty fields
+
+  - `QueryBuilder`
+    - safer parameter handling
+    - improved API consistency
+
+  - `db_compat.hpp`
+    - centralized DB interop layer
+    - cleaner type exposure
+
+- **CMake**
+  - improved example integration
+  - better standalone + monorepo compatibility
+
+---
 
 ### Removed
 
--
+- Legacy examples:
+  - batch_insert_tx.cpp
+  - error_handling.cpp
+  - querybuilder_update.cpp
+  - repository_crud_full.cpp
+  - tx_unit_of_work.cpp
+  - users_crud.cpp
 
-## [0.1.2] - 2025-10-06
+Replaced by a structured numbered examples system.
 
-### Added
-
--
-
-### Changed
-
--
-
-### Removed
-
--
-
-## [0.1.1] - 2025-10-06
-
-### Added
-
--
-
-### Changed
-
--
-
-### Removed
-
--
-
-### Added
-
-- Modular C++ framework structure with `core`, `orm`, `cli`, `docs`, `middleware`, `websocket`, `devtools`, `examples`.
-- `App` class for simplified HTTP server setup.
-- Router system supporting dynamic route parameters (`/users/{id}` style).
-- JSON response wrapper using `nlohmann::json`.
-- Middleware system for request handling.
-- Example endpoints `/hello`, `/ping`, and `/users/{id}`.
-- Thread-safe signal handling for graceful shutdown.
-- Basic configuration system (`Config` class) to manage JSON config files.
-
-### Changed
-
-- Logger integrated using `spdlog` with configurable log levels.
-- Improved request parameter extraction for performance.
+---
 
 ### Fixed
 
-- Path parameter extraction to correctly handle `string_view` types.
-- Fixed default response for unmatched routes (`404` JSON message).
+- **UnitOfWork**
+
+  - removed invalid move assignment
+    (Transaction is non-assignable)
+
+  - fixed const correctness for `conn()`
+
+- **Examples**
+
+  - fixed entity initialization issues
+  - aligned examples with current API
+
+- **General**
+
+  - improved build stability for examples
+  - fixed multiple compilation edge cases
 
 ---
 
-## [0.1.0] - 2025-10-06
+## [1.8.0]
 
 ### Added
-
-- Initial release of core module with working HTTP server.
-- Basic routing system and request handlers.
-- Simple example endpoints demonstrating JSON and text responses.
-- Thread-safe server shutdown handling.
-- Integration of performance measurement scripts (FlameGraph ready).
-
-### Changed
-
-- Optimized route parameter parsing to avoid `boost::regex` overhead.
-
-### Fixed
-
-- Compilation errors due to `string_view` mismatch in request handler.
-- Minor bug fixes in App initialization and signal handling.
+- `vix.json` module definition for `@vix/orm`
+- improved packaging (header + source module)
 
 ---
 
-## [0.0.1] - Draft
+## [1.7.x]
 
-- Project skeleton created.
-- Basic CMake setup and folder structure.
-- Placeholder modules for `core`, `orm`, and `examples`.
+### Changed
+- standalone build improvements
+- fetch only required modules (`core`, `db`)
+
+### Fixed
+- CI stability
+- CMake standalone issues
+
+---
+
+## [1.6.0]
+
+### Changed
+- stabilized public API
+- improved examples
+- inline templates
+
+---
+
+## [1.5.0]
+
+### Changed
+- internal refactor
+
+---
+
+## [1.4.x]
+
+### Added
+- file-based migrations runner
+- CLI migration support
+
+### Fixed
+- MySQL driver gating
+- connection abstraction issues
+
+---
+
+## [1.3.0]
+
+### Fixed
+- CMake integration
+- MySQL linking issues
+
+---
+
+## [1.2.x]
+
+### Added
+- `Database` abstraction
+- multi-engine support (MySQL / SQLite)
+
+---
+
+## [1.1.x]
+
+### Changed
+- modern CMake
+- MySQL / SQLite detection
+- sanitizers
+- documentation improvements
+
+---
+
+## [1.0.0]
+
+### Added
+Initial release:
+
+- ConnectionPool
+- Transaction system
+- UnitOfWork
+- MySQL driver
+- modular CMake
+- documentation + examples
+
+---
+
+## Philosophy
+
+Vix ORM evolves with one invariant:
+
+> No magic
+> No hidden cost
+> No abstraction leaks

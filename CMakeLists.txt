@@ -148,30 +148,87 @@ endif()
 # ------------------------------------------------------------------------------
 # Examples
 # ------------------------------------------------------------------------------
-function(vix_add_orm_example name file)
-  add_executable(${name} ${file})
-  target_link_libraries(${name} PRIVATE vix::orm)
+function(vix_add_orm_example target_name file_path)
+  add_executable(${target_name} ${file_path})
+
+  target_link_libraries(${target_name} PRIVATE vix::orm)
 
   if (VIX_ENABLE_SANITIZERS AND TARGET vix_sanitizers)
-    target_link_libraries(${name} PRIVATE vix_sanitizers)
+    target_link_libraries(${target_name} PRIVATE vix_sanitizers)
   endif()
 
   if (MSVC)
-    target_compile_options(${name} PRIVATE ${_WARNINGS_MSVC})
+    target_compile_options(${target_name} PRIVATE ${_WARNINGS_MSVC})
   else()
-    target_compile_options(${name} PRIVATE ${_WARNINGS_GNU})
+    target_compile_options(${target_name} PRIVATE ${_WARNINGS_GNU})
   endif()
+
+  set_target_properties(${target_name}
+    PROPERTIES
+      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_BINARY_DIR}/examples
+    )
 endfunction()
 
 if (VIX_ORM_BUILD_EXAMPLES)
-  vix_add_orm_example(repository_crud_full
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/repository_crud_full.cpp)
-  vix_add_orm_example(querybuilder_update
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/querybuilder_update.cpp)
-  vix_add_orm_example(tx_unit_of_work
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/tx_unit_of_work.cpp)
-  vix_add_orm_example(error_handling
-    ${CMAKE_CURRENT_SOURCE_DIR}/examples/error_handling.cpp)
+  vix_add_orm_example(orm_example_01_basic_repository
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/01_basic_repository.cpp)
+
+  vix_add_orm_example(orm_example_02_repository_crud
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/02_repository_crud.cpp)
+
+  vix_add_orm_example(orm_example_03_find_all_and_count
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/03_find_all_and_count.cpp)
+
+  vix_add_orm_example(orm_example_04_exists_and_delete
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/04_exists_and_delete.cpp)
+
+  vix_add_orm_example(orm_example_05_unit_of_work
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/05_unit_of_work.cpp)
+
+  vix_add_orm_example(orm_example_06_batch_insert_tx
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/06_batch_insert_tx.cpp)
+
+  vix_add_orm_example(orm_example_07_query_builder_select
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/07_query_builder_select.cpp)
+
+  vix_add_orm_example(orm_example_08_query_builder_update
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/08_query_builder_update.cpp)
+
+  vix_add_orm_example(orm_example_09_error_handling
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/09_error_handling.cpp)
+
+  vix_add_orm_example(orm_example_10_custom_repository
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/10_custom_repository.cpp)
+
+  vix_add_orm_example(orm_example_11_sqlite_repository
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/11_sqlite_repository.cpp)
+
+  vix_add_orm_example(orm_example_12_mysql_repository
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/12_mysql_repository.cpp)
+
+  vix_add_orm_example(orm_example_13_migrations_code
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/13_migrations_code.cpp)
+
+  vix_add_orm_example(orm_example_14_migrations_files
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/14_migrations_files.cpp)
+
+  vix_add_orm_example(orm_example_15_entity_identity
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/15_entity_identity.cpp)
+
+  vix_add_orm_example(orm_example_16_manual_sql_with_orm
+    ${CMAKE_CURRENT_SOURCE_DIR}/examples/16_manual_sql_with_orm.cpp)
+
+  # Migration files needed by migration examples
+  foreach(_migration_target
+    orm_example_13_migrations_code
+    orm_example_14_migrations_files
+  )
+    add_custom_command(TARGET ${_migration_target} POST_BUILD
+      COMMAND ${CMAKE_COMMAND} -E copy_directory
+              ${CMAKE_CURRENT_SOURCE_DIR}/examples/migrations
+              $<TARGET_FILE_DIR:${_migration_target}>/migrations
+    )
+  endforeach()
 endif()
 
 # ------------------------------------------------------------------------------
@@ -211,4 +268,6 @@ else()
     message(STATUS "[vix_orm] deps mode : standalone (no fetch)")
   endif()
 endif()
+message(STATUS "[vix_orm] examples     : ${VIX_ORM_BUILD_EXAMPLES}")
+message(STATUS "[vix_orm] tests        : ${VIX_ORM_BUILD_TESTS}")
 message(STATUS "------------------------------------------------------")
