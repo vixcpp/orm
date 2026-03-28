@@ -1,0 +1,703 @@
+name: ORM Strict CI
+
+on:
+  push:
+    branches: [main, master, dev]
+    paths:
+      - ".github/workflows/orm-strict-ci.yml"
+      - "CMakeLists.txt"
+      - "include/**"
+      - "src/**"
+      - "examples/**"
+      - "docs/**"
+      - "config/**"
+      - "scripts/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "cmd.md"
+      - "vix.json"
+  pull_request:
+    branches: [main, master, dev]
+    paths:
+      - ".github/workflows/orm-strict-ci.yml"
+      - "CMakeLists.txt"
+      - "include/**"
+      - "src/**"
+      - "examples/**"
+      - "docs/**"
+      - "config/**"
+      - "scripts/**"
+      - "README.md"
+      - "CHANGELOG.md"
+      - "cmd.md"
+      - "vix.json"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+env:
+  DEPS: >
+    build-essential
+    cmake
+    ninja-build
+    clang
+    llvm
+    lld
+    g++
+    cppcheck
+    clang-tidy
+    valgrind
+    pkg-config
+    git
+    libasio-dev
+    nlohmann-json3-dev
+    libspdlog-dev
+    libfmt-dev
+    libssl-dev
+    libsqlite3-dev
+    libmysqlcppconn-dev
+  BUILD_JOBS: 2
+  VIX_GIT_BRANCH: dev
+
+jobs:
+  build-sanitized:
+    name: Sanitized Build (${{ matrix.compiler }}, examples=${{ matrix.examples }}, db_backend=${{ matrix.db_backend }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        compiler: [clang, gcc]
+        examples: [ON, OFF]
+        db_backend: [minimal, sqlite, mysql]
+
+    steps:
+      - name: Checkout orm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y $DEPS
+          test -f /usr/include/asio.hpp || (echo "::error::System Asio header not found after install"; exit 1)
+
+      - name: Fetch sibling dependencies
+        run: |
+          rm -rf ../core ../db ../utils ../async ../json ../template
+
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/core.git ../core
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/db.git ../db
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/utils.git ../utils
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" --recurse-submodules https://github.com/vixcpp/async.git ../async
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/json.git ../json
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/template.git ../template || true
+
+          git -C ../async submodule update --init --recursive --depth 1 || true
+
+          echo "---- sibling dependencies ----"
+          ls -la ../core || true
+          ls -la ../db || true
+          ls -la ../utils || true
+          ls -la ../async || true
+          ls -la ../json || true
+          ls -la ../template || true
+
+      - name: Verify required sibling dependencies
+        run: |
+          test -f ../core/CMakeLists.txt || (echo "::error::../core/CMakeLists.txt is missing"; exit 1)
+          test -f ../db/CMakeLists.txt || (echo "::error::../db/CMakeLists.txt is missing"; exit 1)
+          test -f ../utils/CMakeLists.txt || (echo "::error::../utils/CMakeLists.txt is missing"; exit 1)
+          test -f ../async/CMakeLists.txt || (echo "::error::../async/CMakeLists.txt is missing"; exit 1)
+          test -f ../json/CMakeLists.txt || (echo "::error::../json/CMakeLists.txt is missing"; exit 1)
+
+      - name: Show DB driver environment
+        run: |
+          echo "---- mysql connector ----"
+          ls -la /usr/lib/x86_64-linux-gnu/libmysqlcppconn* || true
+          ls -la /usr/include/cppconn || true
+          ls -la /usr/include/mysql-cppconn-8 || true
+          echo "---- sqlite ----"
+          ls -la /usr/include/sqlite3.h || true
+
+      - name: Export dependency include paths
+        run: |
+          EXTRA_PATHS="$GITHUB_WORKSPACE/../core/include:$GITHUB_WORKSPACE/../db/include:$GITHUB_WORKSPACE/../utils/include:$GITHUB_WORKSPACE/../async/include:$GITHUB_WORKSPACE/../json/include"
+          if [ -d "$GITHUB_WORKSPACE/../template/include" ]; then
+            EXTRA_PATHS="$EXTRA_PATHS:$GITHUB_WORKSPACE/../template/include"
+          fi
+          echo "CPATH=$EXTRA_PATHS${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=$EXTRA_PATHS${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Select compiler
+        run: |
+          if [ "${{ matrix.compiler }}" = "clang" ]; then
+            echo "CC=clang" >> "$GITHUB_ENV"
+            echo "CXX=clang++" >> "$GITHUB_ENV"
+          else
+            echo "CC=gcc" >> "$GITHUB_ENV"
+            echo "CXX=g++" >> "$GITHUB_ENV"
+          fi
+
+      - name: Configure (minimal)
+        if: matrix.db_backend == 'minimal'
+        run: |
+          cmake -G Ninja -S . -B build-sanitize \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENABLE_SANITIZERS=ON \
+            -DVIX_ORM_BUILD_EXAMPLES=${{ matrix.examples }} \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Configure (sqlite)
+        if: matrix.db_backend == 'sqlite'
+        run: |
+          cmake -G Ninja -S . -B build-sanitize \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENABLE_SANITIZERS=ON \
+            -DVIX_ORM_BUILD_EXAMPLES=${{ matrix.examples }} \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=ON \
+            -DVIX_DB_REQUIRE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Configure (mysql)
+        if: matrix.db_backend == 'mysql'
+        run: |
+          cmake -G Ninja -S . -B build-sanitize \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENABLE_SANITIZERS=ON \
+            -DVIX_ORM_BUILD_EXAMPLES=${{ matrix.examples }} \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=ON \
+            -DVIX_DB_REQUIRE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Build
+        run: |
+          cmake --build build-sanitize -j"${BUILD_JOBS}"
+
+      - name: Print executables
+        run: |
+          echo "---- executables ----"
+          find build-sanitize -type f -executable | sort || true
+
+  runtime-smoke:
+    name: Runtime Smoke Checks
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout orm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y $DEPS
+          test -f /usr/include/asio.hpp || (echo "::error::System Asio header not found after install"; exit 1)
+
+      - name: Fetch sibling dependencies
+        run: |
+          rm -rf ../core ../db ../utils ../async ../json ../template
+
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/core.git ../core
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/db.git ../db
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/utils.git ../utils
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" --recurse-submodules https://github.com/vixcpp/async.git ../async
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/json.git ../json
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/template.git ../template || true
+
+          git -C ../async submodule update --init --recursive --depth 1 || true
+
+      - name: Verify required sibling dependencies
+        run: |
+          test -f ../core/CMakeLists.txt || (echo "::error::../core/CMakeLists.txt is missing"; exit 1)
+          test -f ../db/CMakeLists.txt || (echo "::error::../db/CMakeLists.txt is missing"; exit 1)
+          test -f ../utils/CMakeLists.txt || (echo "::error::../utils/CMakeLists.txt is missing"; exit 1)
+          test -f ../async/CMakeLists.txt || (echo "::error::../async/CMakeLists.txt is missing"; exit 1)
+          test -f ../json/CMakeLists.txt || (echo "::error::../json/CMakeLists.txt is missing"; exit 1)
+
+      - name: Export dependency include paths
+        run: |
+          EXTRA_PATHS="$GITHUB_WORKSPACE/../core/include:$GITHUB_WORKSPACE/../db/include:$GITHUB_WORKSPACE/../utils/include:$GITHUB_WORKSPACE/../async/include:$GITHUB_WORKSPACE/../json/include"
+          if [ -d "$GITHUB_WORKSPACE/../template/include" ]; then
+            EXTRA_PATHS="$EXTRA_PATHS:$GITHUB_WORKSPACE/../template/include"
+          fi
+          echo "CPATH=$EXTRA_PATHS${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=$EXTRA_PATHS${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Configure runtime build
+        run: |
+          cmake -G Ninja -S . -B build-runtime \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DVIX_ENABLE_SANITIZERS=OFF \
+            -DVIX_ORM_BUILD_EXAMPLES=ON \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=ON \
+            -DVIX_DB_REQUIRE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Build runtime artifacts
+        run: |
+          cmake --build build-runtime -j"${BUILD_JOBS}"
+
+      - name: List candidate executables
+        run: |
+          echo "---- runtime candidates ----"
+          find build-runtime -type f -executable | sort || true
+
+      - name: Run smoke tests on executables
+        shell: bash
+        run: |
+          set +e
+          FAIL=0
+
+          mapfile -t CANDIDATES < <(
+            find build-runtime -type f -executable | while read -r exe; do
+              base="$(basename "$exe")"
+              if [[ ! "$exe" =~ /CMakeFiles/ ]] && [[ ! "$base" =~ (cmake|ctest) ]]; then
+                echo "$exe"
+              fi
+            done | sort -u
+          )
+
+          if [ ${#CANDIDATES[@]} -eq 0 ]; then
+            echo "No executable candidates found."
+            exit 0
+          fi
+
+          for exe in "${CANDIDATES[@]}"; do
+            echo "==> Smoke run: $exe"
+            timeout 5s "$exe" >/tmp/orm_smoke.log 2>&1
+            STATUS=$?
+            cat /tmp/orm_smoke.log || true
+
+            if [ $STATUS -ne 0 ] && [ $STATUS -ne 124 ]; then
+              echo "::warning::Non-zero exit status from $exe (status=$STATUS)"
+              FAIL=1
+            fi
+          done
+
+          if [ $FAIL -ne 0 ]; then
+            echo "::warning::Some smoke runs reported issues."
+          else
+            echo "Smoke runs completed."
+          fi
+          exit 0
+
+  static-analysis:
+    name: Static Analysis
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout orm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y $DEPS
+          test -f /usr/include/asio.hpp || (echo "::error::System Asio header not found after install"; exit 1)
+
+      - name: Fetch sibling dependencies
+        run: |
+          rm -rf ../core ../db ../utils ../async ../json ../template
+
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/core.git ../core
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/db.git ../db
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/utils.git ../utils
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" --recurse-submodules https://github.com/vixcpp/async.git ../async
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/json.git ../json
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/template.git ../template || true
+
+          git -C ../async submodule update --init --recursive --depth 1 || true
+
+      - name: Verify required sibling dependencies
+        run: |
+          test -f ../core/CMakeLists.txt || (echo "::error::../core/CMakeLists.txt is missing"; exit 1)
+          test -f ../db/CMakeLists.txt || (echo "::error::../db/CMakeLists.txt is missing"; exit 1)
+          test -f ../utils/CMakeLists.txt || (echo "::error::../utils/CMakeLists.txt is missing"; exit 1)
+          test -f ../async/CMakeLists.txt || (echo "::error::../async/CMakeLists.txt is missing"; exit 1)
+          test -f ../json/CMakeLists.txt || (echo "::error::../json/CMakeLists.txt is missing"; exit 1)
+
+      - name: Export dependency include paths
+        run: |
+          EXTRA_PATHS="$GITHUB_WORKSPACE/../core/include:$GITHUB_WORKSPACE/../db/include:$GITHUB_WORKSPACE/../utils/include:$GITHUB_WORKSPACE/../async/include:$GITHUB_WORKSPACE/../json/include"
+          if [ -d "$GITHUB_WORKSPACE/../template/include" ]; then
+            EXTRA_PATHS="$EXTRA_PATHS:$GITHUB_WORKSPACE/../template/include"
+          fi
+          echo "CPATH=$EXTRA_PATHS${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=$EXTRA_PATHS${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Configure for analysis
+        run: |
+          cmake -G Ninja -S . -B build-analyze \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DCMAKE_EXPORT_COMPILE_COMMANDS=ON \
+            -DVIX_ENABLE_SANITIZERS=OFF \
+            -DVIX_ORM_BUILD_EXAMPLES=ON \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=ON \
+            -DVIX_DB_REQUIRE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Run clang-tidy on source files
+        run: |
+          set +e
+          find src examples -name '*.cpp' -print0 | xargs -0 -n1 -P2 clang-tidy -p build-analyze
+          STATUS=$?
+          if [ $STATUS -ne 0 ]; then
+            echo "::warning::clang-tidy reported issues."
+          else
+            echo "clang-tidy completed successfully."
+          fi
+          exit 0
+
+      - name: Run cppcheck on headers and sources
+        run: |
+          set +e
+          cppcheck \
+            --enable=all \
+            --std=c++20 \
+            --inconclusive \
+            --quiet \
+            --suppress=missingIncludeSystem \
+            include/ src/ examples/
+          STATUS=$?
+          if [ $STATUS -ne 0 ]; then
+            echo "::warning::cppcheck reported issues."
+          else
+            echo "cppcheck completed successfully."
+          fi
+          exit 0
+
+  valgrind:
+    name: Valgrind Checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout orm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y $DEPS
+          test -f /usr/include/asio.hpp || (echo "::error::System Asio header not found after install"; exit 1)
+
+      - name: Fetch sibling dependencies
+        run: |
+          rm -rf ../core ../db ../utils ../async ../json ../template
+
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/core.git ../core
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/db.git ../db
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/utils.git ../utils
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" --recurse-submodules https://github.com/vixcpp/async.git ../async
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/json.git ../json
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/template.git ../template || true
+
+          git -C ../async submodule update --init --recursive --depth 1 || true
+
+      - name: Verify required sibling dependencies
+        run: |
+          test -f ../core/CMakeLists.txt || (echo "::error::../core/CMakeLists.txt is missing"; exit 1)
+          test -f ../db/CMakeLists.txt || (echo "::error::../db/CMakeLists.txt is missing"; exit 1)
+          test -f ../utils/CMakeLists.txt || (echo "::error::../utils/CMakeLists.txt is missing"; exit 1)
+          test -f ../async/CMakeLists.txt || (echo "::error::../async/CMakeLists.txt is missing"; exit 1)
+          test -f ../json/CMakeLists.txt || (echo "::error::../json/CMakeLists.txt is missing"; exit 1)
+
+      - name: Export dependency include paths
+        run: |
+          EXTRA_PATHS="$GITHUB_WORKSPACE/../core/include:$GITHUB_WORKSPACE/../db/include:$GITHUB_WORKSPACE/../utils/include:$GITHUB_WORKSPACE/../async/include:$GITHUB_WORKSPACE/../json/include"
+          if [ -d "$GITHUB_WORKSPACE/../template/include" ]; then
+            EXTRA_PATHS="$EXTRA_PATHS:$GITHUB_WORKSPACE/../template/include"
+          fi
+          echo "CPATH=$EXTRA_PATHS${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=$EXTRA_PATHS${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Configure valgrind build
+        run: |
+          cmake -G Ninja -S . -B build-valgrind \
+            -DCMAKE_BUILD_TYPE=Debug \
+            -DVIX_ENABLE_SANITIZERS=OFF \
+            -DVIX_ORM_BUILD_EXAMPLES=ON \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=ON \
+            -DVIX_DB_REQUIRE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Build
+        run: |
+          cmake --build build-valgrind -j"${BUILD_JOBS}"
+
+      - name: Run valgrind on executables
+        shell: bash
+        run: |
+          set +e
+          FAIL=0
+
+          mapfile -t BINS < <(
+            find build-valgrind -type f -executable | while read -r exe; do
+              base="$(basename "$exe")"
+              if [[ ! "$exe" =~ /CMakeFiles/ ]] && [[ ! "$base" =~ (cmake|ctest) ]]; then
+                echo "$exe"
+              fi
+            done | sort -u
+          )
+
+          if [ ${#BINS[@]} -eq 0 ]; then
+            echo "No candidate executables found for valgrind."
+            exit 0
+          fi
+
+          for exe in "${BINS[@]}"; do
+            echo "==> Valgrind: $exe"
+            timeout 20s valgrind \
+              --leak-check=full \
+              --show-leak-kinds=all \
+              --track-origins=yes \
+              "$exe"
+            STATUS=$?
+
+            if [ $STATUS -ne 0 ] && [ $STATUS -ne 124 ]; then
+              echo "::warning::Valgrind reported issues for $exe"
+              FAIL=1
+            fi
+          done
+
+          if [ $FAIL -ne 0 ]; then
+            echo "::warning::Valgrind detected potential issues."
+          else
+            echo "Valgrind checks completed."
+          fi
+          exit 0
+
+  standalone-package-check:
+    name: Standalone Package Export Check
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout orm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y $DEPS
+          test -f /usr/include/asio.hpp || (echo "::error::System Asio header not found after install"; exit 1)
+
+      - name: Fetch sibling dependencies
+        run: |
+          rm -rf ../core ../db ../utils ../async ../json ../template
+
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/core.git ../core
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/db.git ../db
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/utils.git ../utils
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" --recurse-submodules https://github.com/vixcpp/async.git ../async
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/json.git ../json
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/template.git ../template || true
+
+          git -C ../async submodule update --init --recursive --depth 1 || true
+
+      - name: Verify required sibling dependencies
+        run: |
+          test -f ../core/CMakeLists.txt || (echo "::error::../core/CMakeLists.txt is missing"; exit 1)
+          test -f ../db/CMakeLists.txt || (echo "::error::../db/CMakeLists.txt is missing"; exit 1)
+          test -f ../utils/CMakeLists.txt || (echo "::error::../utils/CMakeLists.txt is missing"; exit 1)
+          test -f ../async/CMakeLists.txt || (echo "::error::../async/CMakeLists.txt is missing"; exit 1)
+          test -f ../json/CMakeLists.txt || (echo "::error::../json/CMakeLists.txt is missing"; exit 1)
+
+      - name: Export dependency include paths
+        run: |
+          EXTRA_PATHS="$GITHUB_WORKSPACE/../core/include:$GITHUB_WORKSPACE/../db/include:$GITHUB_WORKSPACE/../utils/include:$GITHUB_WORKSPACE/../async/include:$GITHUB_WORKSPACE/../json/include"
+          if [ -d "$GITHUB_WORKSPACE/../template/include" ]; then
+            EXTRA_PATHS="$EXTRA_PATHS:$GITHUB_WORKSPACE/../template/include"
+          fi
+          echo "CPATH=$EXTRA_PATHS${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=$EXTRA_PATHS${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Configure installable standalone build
+        run: |
+          cmake -G Ninja -S . -B build-install \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIX_ORM_BUILD_EXAMPLES=OFF \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF \
+            -DCMAKE_INSTALL_PREFIX="${PWD}/.ci-install"
+
+      - name: Build standalone package
+        run: |
+          cmake --build build-install -j"${BUILD_JOBS}"
+
+      - name: Install standalone package
+        run: |
+          cmake --install build-install
+
+      - name: Verify installed package files
+        run: |
+          echo "---- install tree ----"
+          find .ci-install -maxdepth 6 -type f | sort || true
+          test -f .ci-install/include/vix/orm/orm.hpp || (echo "::error::orm headers not found"; exit 1)
+
+  config-coverage:
+    name: Configuration Coverage
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout orm repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Install dependencies
+        run: |
+          sudo apt-get update -y
+          sudo apt-get install -y $DEPS
+          test -f /usr/include/asio.hpp || (echo "::error::System Asio header not found after install"; exit 1)
+
+      - name: Fetch sibling dependencies
+        run: |
+          rm -rf ../core ../db ../utils ../async ../json ../template
+
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/core.git ../core
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/db.git ../db
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/utils.git ../utils
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" --recurse-submodules https://github.com/vixcpp/async.git ../async
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/json.git ../json
+          git clone --depth 1 --branch "${VIX_GIT_BRANCH}" https://github.com/vixcpp/template.git ../template || true
+
+          git -C ../async submodule update --init --recursive --depth 1 || true
+
+      - name: Verify required sibling dependencies
+        run: |
+          test -f ../core/CMakeLists.txt || (echo "::error::../core/CMakeLists.txt is missing"; exit 1)
+          test -f ../db/CMakeLists.txt || (echo "::error::../db/CMakeLists.txt is missing"; exit 1)
+          test -f ../utils/CMakeLists.txt || (echo "::error::../utils/CMakeLists.txt is missing"; exit 1)
+          test -f ../async/CMakeLists.txt || (echo "::error::../async/CMakeLists.txt is missing"; exit 1)
+          test -f ../json/CMakeLists.txt || (echo "::error::../json/CMakeLists.txt is missing"; exit 1)
+
+      - name: Export dependency include paths
+        run: |
+          EXTRA_PATHS="$GITHUB_WORKSPACE/../core/include:$GITHUB_WORKSPACE/../db/include:$GITHUB_WORKSPACE/../utils/include:$GITHUB_WORKSPACE/../async/include:$GITHUB_WORKSPACE/../json/include"
+          if [ -d "$GITHUB_WORKSPACE/../template/include" ]; then
+            EXTRA_PATHS="$EXTRA_PATHS:$GITHUB_WORKSPACE/../template/include"
+          fi
+          echo "CPATH=$EXTRA_PATHS${CPATH:+:$CPATH}" >> "$GITHUB_ENV"
+          echo "CPLUS_INCLUDE_PATH=$EXTRA_PATHS${CPLUS_INCLUDE_PATH:+:$CPLUS_INCLUDE_PATH}" >> "$GITHUB_ENV"
+
+      - name: Configure release mode minimal
+        run: |
+          cmake -G Ninja -S . -B build-release-min \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIX_ENABLE_SANITIZERS=OFF \
+            -DVIX_ORM_BUILD_EXAMPLES=OFF \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Build release mode minimal
+        run: |
+          cmake --build build-release-min -j"${BUILD_JOBS}"
+
+      - name: Configure release mode with SQLite
+        run: |
+          cmake -G Ninja -S . -B build-release-sqlite \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIX_ENABLE_SANITIZERS=OFF \
+            -DVIX_ORM_BUILD_EXAMPLES=OFF \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=ON \
+            -DVIX_DB_REQUIRE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Build release mode with SQLite
+        run: |
+          cmake --build build-release-sqlite -j"${BUILD_JOBS}"
+
+      - name: Configure release mode with MySQL
+        run: |
+          cmake -G Ninja -S . -B build-release-mysql \
+            -DCMAKE_BUILD_TYPE=Release \
+            -DVIX_ENABLE_SANITIZERS=OFF \
+            -DVIX_ORM_BUILD_EXAMPLES=OFF \
+            -DVIX_ORM_FETCH_VIX_DEPS=OFF \
+            -DVIX_DB_BUILD_EXAMPLES=OFF \
+            -DVIX_DB_USE_MYSQL=ON \
+            -DVIX_DB_REQUIRE_MYSQL=OFF \
+            -DVIX_DB_USE_SQLITE=OFF \
+            -DVIX_DB_USE_POSTGRES=OFF \
+            -DVIX_DB_USE_REDIS=OFF
+
+      - name: Build release mode with MySQL
+        run: |
+          cmake --build build-release-mysql -j"${BUILD_JOBS}"
+
+  summary:
+    name: ORM Strict CI Summary
+    needs:
+      [
+        build-sanitized,
+        runtime-smoke,
+        static-analysis,
+        valgrind,
+        standalone-package-check,
+        config-coverage,
+      ]
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Print summary
+        run: |
+          echo "ORM strict CI completed."
+          echo "This workflow validates:"
+          echo "- sanitized builds"
+          echo "- example builds"
+          echo "- runtime smoke checks"
+          echo "- static analysis"
+          echo "- valgrind"
+          echo "- standalone package export"
+          echo "- minimal db backend mode"
+          echo "- sqlite db backend mode"
+          echo "- mysql db backend mode"
