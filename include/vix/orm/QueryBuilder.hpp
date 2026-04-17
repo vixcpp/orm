@@ -199,7 +199,7 @@ namespace vix::orm
      */
     QueryBuilder &param(std::uint64_t value)
     {
-      return param(vix::db::i64(static_cast<std::int64_t>(value)));
+      return param(vix::db::u64(value));
     }
 
     /**

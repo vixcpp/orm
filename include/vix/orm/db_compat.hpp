@@ -39,6 +39,7 @@
 #include <typeinfo>
 #include <utility>
 #include <vector>
+#include <limits>
 
 namespace vix::orm
 {
@@ -126,44 +127,52 @@ namespace vix::orm
 
     if (value.type() == typeid(int))
       return vix::db::i64(static_cast<std::int64_t>(std::any_cast<int>(value)));
+
     if (value.type() == typeid(unsigned))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<unsigned>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<unsigned>(value)));
 
     if (value.type() == typeid(long))
       return vix::db::i64(static_cast<std::int64_t>(std::any_cast<long>(value)));
+
     if (value.type() == typeid(unsigned long))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<unsigned long>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<unsigned long>(value)));
 
     if (value.type() == typeid(long long))
       return vix::db::i64(static_cast<std::int64_t>(std::any_cast<long long>(value)));
+
     if (value.type() == typeid(unsigned long long))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<unsigned long long>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<unsigned long long>(value)));
 
     if (value.type() == typeid(std::size_t))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::size_t>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<std::size_t>(value)));
 
     if (value.type() == typeid(std::int64_t))
       return vix::db::i64(std::any_cast<std::int64_t>(value));
+
     if (value.type() == typeid(std::uint64_t))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::uint64_t>(value)));
+      return vix::db::u64(std::any_cast<std::uint64_t>(value));
 
     if (value.type() == typeid(std::int32_t))
       return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::int32_t>(value)));
+
     if (value.type() == typeid(std::uint32_t))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::uint32_t>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<std::uint32_t>(value)));
 
     if (value.type() == typeid(std::int16_t))
       return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::int16_t>(value)));
+
     if (value.type() == typeid(std::uint16_t))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::uint16_t>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<std::uint16_t>(value)));
 
     if (value.type() == typeid(std::int8_t))
       return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::int8_t>(value)));
+
     if (value.type() == typeid(std::uint8_t))
-      return vix::db::i64(static_cast<std::int64_t>(std::any_cast<std::uint8_t>(value)));
+      return vix::db::u64(static_cast<std::uint64_t>(std::any_cast<std::uint8_t>(value)));
 
     if (value.type() == typeid(double))
       return vix::db::f64(std::any_cast<double>(value));
+
     if (value.type() == typeid(float))
       return vix::db::f64(static_cast<double>(std::any_cast<float>(value)));
 

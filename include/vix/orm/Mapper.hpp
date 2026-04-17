@@ -42,6 +42,21 @@ namespace vix::orm
    */
   using FieldValues = std::vector<FieldValue>;
 
+  namespace detail
+  {
+    /**
+     * @brief Helper constant used to trigger dependent static_assert.
+     *
+     * This value is always false but depends on the template parameter,
+     * which ensures that the assertion only fires when an unsupported
+     * Mapper<T> member is actually instantiated.
+     *
+     * @tparam T Entity type.
+     */
+    template <class T>
+    inline constexpr bool always_false_v = false;
+  } // namespace detail
+
   /**
    * @brief User-specialized mapper for ORM entities.
    *
@@ -84,10 +99,22 @@ namespace vix::orm
      * This method is used when materializing query results into
      * user-defined entity objects.
      *
+     * The primary template is intentionally unsupported. Users must
+     * provide a full specialization of Mapper<T> for each mapped type.
+     *
      * @param row Database result row.
      * @return Constructed entity instance.
      */
-    static T fromRow(const vix::db::ResultRow &row);
+    static T fromRow(const vix::db::ResultRow &row)
+    {
+      (void)row;
+
+      static_assert(detail::always_false_v<T>,
+                    "vix::orm::Mapper<T>::fromRow is not implemented. "
+                    "Provide a full specialization of Mapper<T>.");
+
+      return T{};
+    }
 
     /**
      * @brief Produce field/value pairs for an INSERT statement.
@@ -95,10 +122,22 @@ namespace vix::orm
      * The returned fields define which columns are inserted and which
      * values are bound for the operation.
      *
+     * The primary template is intentionally unsupported. Users must
+     * provide a full specialization of Mapper<T> for each mapped type.
+     *
      * @param value Entity instance.
      * @return Field/value pairs for insertion.
      */
-    static FieldValues toInsertFields(const T &value);
+    static FieldValues toInsertFields(const T &value)
+    {
+      (void)value;
+
+      static_assert(detail::always_false_v<T>,
+                    "vix::orm::Mapper<T>::toInsertFields is not implemented. "
+                    "Provide a full specialization of Mapper<T>.");
+
+      return {};
+    }
 
     /**
      * @brief Produce field/value pairs for an UPDATE statement.
@@ -108,10 +147,22 @@ namespace vix::orm
      *
      * Primary keys and immutable fields are typically excluded.
      *
+     * The primary template is intentionally unsupported. Users must
+     * provide a full specialization of Mapper<T> for each mapped type.
+     *
      * @param value Entity instance.
      * @return Field/value pairs for update.
      */
-    static FieldValues toUpdateFields(const T &value);
+    static FieldValues toUpdateFields(const T &value)
+    {
+      (void)value;
+
+      static_assert(detail::always_false_v<T>,
+                    "vix::orm::Mapper<T>::toUpdateFields is not implemented. "
+                    "Provide a full specialization of Mapper<T>.");
+
+      return {};
+    }
 
     /**
      * @brief Backward-compatible alias for older mapper implementations.
