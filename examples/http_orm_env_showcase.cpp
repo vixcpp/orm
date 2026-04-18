@@ -19,7 +19,7 @@
  *
  *  It demonstrates:
  *    - loading database configuration from .env
- *    - bootstrapping a SQLite/MySQL database with Database::from_env()
+ *    - bootstrapping a SQLite/MySQL database with Config::Config cfg(".env")
  *    - explicit ORM mapping with Mapper<T>
  *    - repository-based reads and writes
  *    - custom repository queries
@@ -238,10 +238,9 @@ static void bootstrap_database(vix::db::Database &db)
       static_cast<std::int64_t>(22));
 }
 
-static AppState create_app_state_from_env()
+static AppState create_app_state(const vix::config::Config &cfg)
 {
-  auto db = std::make_shared<vix::db::Database>(
-      vix::db::Database::from_env(".env"));
+  auto db = std::make_shared<vix::db::Database>(cfg);
 
   bootstrap_database(*db);
 
@@ -275,16 +274,19 @@ static J::kvs user_to_json(const User &u)
 // Route registration
 // -----------------------------------------------------------------------------
 
-static void register_public_routes(App &app, const AppState &state)
+static void register_public_routes(
+    App &app,
+    const AppState &state,
+    const vix::config::Config &cfg)
 {
-  app.get("/", [state](Request &, Response &res)
-          {
-            const auto &cfg = vix::config::Config::getInstance(".env");
-
-            res.json(J::obj({
-                "message", "Vix HTTP + ORM + .env showcase",
-                "database_engine", cfg.getString("database.engine", "sqlite"),
-                "hint", "Try /health, /users, /users/1, /users/email/{email}, POST /users",
+  app.get("/", [state, &cfg](Request &, Response &res)
+          { res.json(J::obj({
+                "message",
+                "Vix HTTP + ORM + .env showcase",
+                "database_engine",
+                cfg.getString("database.engine", "sqlite"),
+                "hint",
+                "Try /health, /users, /users/1, /users/email/{email}, POST /users",
             })); });
 
   app.get("/health", [state](Request &, Response &res)
@@ -606,9 +608,12 @@ static void register_debug_routes(App &app, const AppState &)
             })); });
 }
 
-static void register_all_routes(App &app, const AppState &state)
+static void register_all_routes(
+    App &app,
+    const AppState &state,
+    const vix::config::Config &cfg)
 {
-  register_public_routes(app, state);
+  register_public_routes(app, state, cfg);
   register_user_routes(app, state);
   register_debug_routes(app, state);
 }
@@ -619,11 +624,13 @@ static void register_all_routes(App &app, const AppState &state)
 
 static int run_server()
 {
-  App app;
-  const AppState state = create_app_state_from_env();
+  vix::config::Config cfg{".env"};
 
-  register_all_routes(app, state);
-  app.run(8080);
+  App app;
+  const AppState state = create_app_state(cfg);
+
+  register_all_routes(app, state, cfg);
+  app.run(cfg.getServerPort());
   return 0;
 }
 

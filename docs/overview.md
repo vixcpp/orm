@@ -183,11 +183,14 @@ qb.raw("UPDATE users SET age=? WHERE email=?")
 #### ✔️ Insert with Repository
 
 ```cpp
-DbConfig cfg = make_db_config_from_vix_config(vix::config::Config::getInstance());
-Database db{cfg};
+vix::config::Config cfg{".env"};
+
+vix::db::Database db{cfg};
 
 Repository<User> users{db.pool(), "users"};
+
 auto id = users.create({0, "Gaspard", "gaspard@example.com", 28});
+
 std::cout << "User inserted with id=" << id << "\n";
 ```
 
@@ -269,13 +272,12 @@ runner.runAll();
 Example: Simple CRUD (examples/users_crud.cpp)
 
 ```cpp
-DbConfig cfg = make_db_config_from_vix_config(
-    vix::config::Config::getInstance()
-);
+vix::config::Config cfg{".env"};
 
-Database db{cfg};
+vix::db::Database db{cfg};
 
 Repository<User> users{db.pool(), "users"};
+
 auto id = users.create({0, "Gaspard", "gaspard@example.com", 28});
 
 std::cout << "User inserted with id=" << id << "\n";
