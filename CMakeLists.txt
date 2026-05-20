@@ -58,6 +58,34 @@ set(VIX_ORM_SOURCES
 )
 
 # ------------------------------------------------------------------------------
+# Core preload dependencies
+# ------------------------------------------------------------------------------
+# Core and DB need these targets to be available before they are configured.
+# Otherwise core may disable JSON/template/env and fail later while compiling
+# headers that still include those modules.
+
+if (NOT TARGET vix::json AND NOT TARGET vix_json)
+  if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../json/CMakeLists.txt")
+    message(STATUS "[vix_orm] Adding json before core/db: ../json")
+    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../json" json_build)
+  endif()
+endif()
+
+if (NOT TARGET vix::template AND NOT TARGET template)
+  if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../template/CMakeLists.txt")
+    message(STATUS "[vix_orm] Adding template before core/db: ../template")
+    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../template" template_build)
+  endif()
+endif()
+
+if (NOT TARGET vix::env AND NOT TARGET vix_env)
+  if (EXISTS "${CMAKE_CURRENT_LIST_DIR}/../env/CMakeLists.txt")
+    message(STATUS "[vix_orm] Adding env before core/db: ../env")
+    add_subdirectory("${CMAKE_CURRENT_LIST_DIR}/../env" env_build)
+  endif()
+endif()
+
+# ------------------------------------------------------------------------------
 # Bring required modules (core/db)
 # ------------------------------------------------------------------------------
 set(_VIX_ORM_HAS_MONOREPO_DEPS OFF)
