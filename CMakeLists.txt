@@ -38,7 +38,9 @@ set(_WARNINGS_GNU
 set(_WARNINGS_MSVC /W4 /permissive-)
 
 # optional deps
-find_package(spdlog QUIET CONFIG)
+if (NOT VIX_LOGGING_DEPS_BUNDLED)
+  find_package(spdlog QUIET CONFIG)
+endif()
 
 # ------------------------------------------------------------------------------
 # Sources / Headers (ORM sugar only)
@@ -162,7 +164,7 @@ else()
 endif()
 
 # deps / defines
-if (spdlog_FOUND)
+if (NOT VIX_LOGGING_DEPS_BUNDLED AND spdlog_FOUND)
   if (TARGET spdlog::spdlog_header_only)
     target_link_libraries(vix_orm PUBLIC spdlog::spdlog_header_only)
   elseif (TARGET spdlog::spdlog)
